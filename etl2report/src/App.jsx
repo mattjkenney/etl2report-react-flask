@@ -1,54 +1,80 @@
 import { useState } from 'react'
 import Layout from './components/Layout'
+import Login from './components/Login'
+import Button from './components/Button'
 import { useTheme } from './contexts/ThemeContext'
 
 function App() {
   const [count, setCount] = useState(0)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [user, setUser] = useState(null)
+  const [showLoginForm, setShowLoginForm] = useState(false)
   const { currentTheme } = useTheme()
 
+  const handleLogin = async (loginData) => {
+    // Simulate authentication
+    console.log('Login attempt:', loginData)
+    
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    // For demo purposes, accept any login
+    setUser({ username: loginData.username })
+    setIsLoggedIn(true)
+    setShowLoginForm(false) // Hide login form after successful login
+  }
+
+  const handleShowLogin = () => {
+    setShowLoginForm(true)
+  }
+
+  const handleSignup = () => {
+    // Handle signup navigation or modal
+    console.log('Signup clicked')
+    alert('Signup functionality would redirect to signup page or open signup modal')
+    // In a real app, you might:
+    // - Navigate to a signup route
+    // - Open a signup modal
+    // - Switch to a signup component
+  }
+
+  const handleLogout = () => {
+    setUser(null)
+    setIsLoggedIn(false)
+    setShowLoginForm(false)
+  }
+
   return (
-    <Layout>
+    <Layout 
+      isLoggedIn={isLoggedIn}
+      user={user}
+      onLogin={handleShowLogin}
+      onLogout={handleLogout}
+    >
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold text-theme-primary">Welcome to InstaReport</h1>
         
-        <div className="bg-theme-secondary p-6 rounded-lg border border-theme-primary shadow-theme">
-          <p className="text-theme-secondary mb-4">
-            Current theme: <span className="font-semibold text-theme-primary">{currentTheme}</span>
-          </p>
-          
-          <div className="space-y-4">
-            <div className="bg-theme-tertiary p-4 rounded border border-theme-secondary">
-              <h2 className="text-xl font-semibold text-theme-primary mb-2">Theme Demo</h2>
-              <p className="text-theme-secondary">
-                This component demonstrates the theme system with different background levels and text colors.
-              </p>
-            </div>
-            
-            <button 
-              onClick={() => setCount(count + 1)}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors"
-            >
-              Click count: {count}
-            </button>
+        {(!isLoggedIn && showLoginForm) ? (
+          <div className="max-w-md mx-auto">
+            <Login 
+              onLogin={handleLogin} 
+              onSignup={handleSignup}
+            />
           </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="bg-theme-secondary p-4 rounded-lg border border-theme-primary shadow-theme">
-            <h3 className="font-semibold text-theme-primary mb-2">Primary Colors</h3>
-            <p className="text-theme-secondary">Background and text adapt to the selected theme.</p>
+        ) : isLoggedIn ? (
+          <Dashboard></Dashboard>
+        ) : (
+          <div className="text-center">
+            <p className="text-theme-secondary mb-4">
+              Please log in to access your dashboard.
+            </p>
+            <Button
+              displayText="Get Started"
+              onClick={handleShowLogin}
+              variant="primary"
+              size="medium"
+            />
           </div>
-          
-          <div className="bg-theme-tertiary p-4 rounded-lg border border-theme-secondary shadow-theme">
-            <h3 className="font-semibold text-theme-primary mb-2">Secondary Colors</h3>
-            <p className="text-theme-muted">Tertiary background with muted text.</p>
-          </div>
-          
-          <div className="bg-theme-secondary p-4 rounded-lg border border-theme-primary shadow-theme-lg">
-            <h3 className="font-semibold text-theme-primary mb-2">Enhanced Shadow</h3>
-            <p className="text-theme-secondary">This card uses the large theme-aware shadow.</p>
-          </div>
-        </div>
+        )}
       </div>
     </Layout>
   )
