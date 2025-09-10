@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Layout from './components/Layout'
 import Login from './components/Login'
 import Button from './components/Button'
+import Dashboard from './components/Dashboard'
 import { useTheme } from './contexts/ThemeContext'
 
 function App() {
@@ -51,18 +52,19 @@ function App() {
       onLogin={handleShowLogin}
       onLogout={handleLogout}
     >
-      <div className="space-y-6">
-        
-        {(!isLoggedIn && showLoginForm) ? (
+      {(!isLoggedIn && showLoginForm) ? (
+        <div className="space-y-6">
           <div className="max-w-md mx-auto">
             <Login 
               onLogin={handleLogin} 
               onSignup={handleSignup}
             />
           </div>
-        ) : isLoggedIn ? (
-          <Dashboard></Dashboard>
-        ) : (
+        </div>
+      ) : isLoggedIn ? (
+        <Dashboard />
+      ) : (
+        <div className="space-y-6">
           <div className="text-center">
             <p className="text-theme-secondary mb-4">
               Please log in to access your dashboard.
@@ -74,8 +76,8 @@ function App() {
               size="medium"
             />
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </Layout>
   )
 }

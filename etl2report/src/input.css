@@ -135,6 +135,24 @@
   box-shadow: 0 10px 15px -3px var(--color-shadow-lg), 0 4px 6px -2px var(--color-shadow);
 }
 
+/* Dashboard layout classes */
+.dashboard-container {
+  height: calc(100vh - 160px);
+}
+
+.dashboard-actions {
+  width: 20%;
+}
+
+.dashboard-view {
+  width: 80%;
+}
+
+.dashboard-content {
+  height: 100%;
+  width: 100%;
+}
+
 /* Smooth transitions for theme changes */
 * {
   transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
