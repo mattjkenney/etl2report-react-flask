@@ -1,14 +1,42 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import Button from './Button';
+import NewTemplate from './NewTemplate';
 
 export default function Actions() {
     const [selectedTemplate, setSelectedTemplate] = useState('');
+    const [showNewTemplate, setShowNewTemplate] = useState(false);
 
     const handleTemplateChange = (e) => {
         setSelectedTemplate(e.target.value);
     };
 
+    const handleNewClick = () => {
+        setShowNewTemplate(true);
+    };
+
+    const handleBackToActions = () => {
+        setShowNewTemplate(false);
+    };
+
     const isTemplateSelected = selectedTemplate !== '';
+
+    // If showing new template form, render it instead of the main actions
+    if (showNewTemplate) {
+        return (
+            <div className="space-y-4">
+                <div className="flex items-center mb-4">
+                    <Button
+                        displayText="← Back"
+                        onClick={handleBackToActions}
+                        variant="secondary"
+                        size="small"
+                        type="button"
+                    />
+                </div>
+                <NewTemplate />
+            </div>
+        );
+    }
 
     return (
         <div className="bg-theme-secondary border border-theme-primary rounded-lg p-4 dashboard-content">
@@ -39,7 +67,7 @@ export default function Actions() {
                 <div className="space-y-3">
                     <Button
                         displayText="New"
-                        onClick={() => alert('New action triggered')}
+                        onClick={handleNewClick}
                         variant='secondary'
                         size='small'
                         className='w-full'
