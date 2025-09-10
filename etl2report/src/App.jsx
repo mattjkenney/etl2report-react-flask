@@ -3,14 +3,14 @@ import Layout from './components/Layout'
 import Login from './components/Login'
 import Button from './components/Button'
 import Dashboard from './components/Dashboard'
-import { useTheme } from './contexts/ThemeContext'
+//import { useTheme } from './contexts/ThemeContext'
 
 function App() {
-  const [count, setCount] = useState(0)
+  //const [count, setCount] = useState(0)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [user, setUser] = useState(null)
   const [showLoginForm, setShowLoginForm] = useState(false)
-  const { currentTheme } = useTheme()
+  //const { currentTheme } = useTheme()
 
   const handleLogin = async (loginData) => {
     // Simulate authentication
