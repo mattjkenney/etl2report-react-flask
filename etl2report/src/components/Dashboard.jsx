@@ -1,16 +1,76 @@
 import Actions from './Actions'
 import View from './View'
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 export default function Dashboard() {
+    const [actionsWidth, setActionsWidth] = useState(20);
+    const [isResizing, setIsResizing] = useState(false);
+    
+    const containerRef = useRef(null);
+
+    const handleMouseDown = useCallback((e) => {
+        e.preventDefault();
+        setIsResizing(true);
+    }, []);
+
+    const handleMouseMove = useCallback((e) => {
+        if (isResizing && containerRef.current) {
+            const containerRect = containerRef.current.getBoundingClientRect();
+            const newWidth = e.clientX - containerRect.left;
+            const newWidthPercent = (newWidth / containerRect.width) * 100;
+            
+            if (newWidthPercent > 10 && newWidthPercent < 90) {
+                setActionsWidth(newWidthPercent);
+            }
+        }
+    }, [isResizing]);
+
+    const handleMouseUp = useCallback(() => {
+        setIsResizing(false);
+    }, []);
+
+    useEffect(() => {
+        if (isResizing) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        } else {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+    }, [isResizing, handleMouseMove, handleMouseUp]);
+
     return (
-        <div className="flex w-full gap-4 dashboard-container">
-            {/* Actions component - 20% width */}
-            <div className="flex-shrink-0 dashboard-actions">
+        <div ref={containerRef} className="flex dashboard-container">
+            {/* Actions component */}
+            <div 
+                className="flex-shrink-0" 
+                style={{ width: actionsWidth + '%' }}
+            >
                 <Actions />
             </div>
             
-            {/* View component - 80% width */}
-            <div className="flex-grow dashboard-view">
+            {/* Resize handle */}
+            <div 
+                className={`resize-handle ${isResizing ? 'active' : ''}`}
+                title="Drag to resize"
+                onMouseDown={handleMouseDown}
+            ></div>
+            
+            {/* View component */}
+            <div 
+                className="flex-grow"
+            >
                 <View />
             </div>
         </div>

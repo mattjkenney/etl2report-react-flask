@@ -153,9 +153,79 @@
   width: 100%;
 }
 
+/* Resize handle for dashboard */
+.resize-handle {
+  width: 4px;
+  background-color: var(--color-border);
+  cursor: col-resize;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.resize-handle:hover {
+  background-color: var(--color-primary);
+}
+
+.resize-handle.active {
+  background-color: var(--color-primary-hover);
+}
+
 /* Smooth transitions for theme changes */
 * {
   transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Additional width classes needed */
+.w-1 {
+  width: 4px;
+}
+
+.w-2 {
+  width: 8px;
+}
+
+/* Additional position classes */
+.relative {
+  position: relative;
+}
+
+.absolute {
+  position: absolute;
+}
+
+.right-0 {
+  right: 0;
+}
+
+.top-0 {
+  top: 0;
+}
+
+.h-full {
+  height: 100%;
+}
+
+/* Cursor classes */
+.cursor-col-resize {
+  cursor: col-resize;
+}
+
+/* Opacity classes */
+.opacity-30 {
+  opacity: 0.3;
+}
+
+.hover\:opacity-100:hover {
+  opacity: 1;
+}
+
+/* Background color classes */
+.bg-gray-300 {
+  background-color: #d1d5db;
+}
+
+.hover\:bg-blue-500:hover {
+  background-color: #3b82f6;
 }
 
 
