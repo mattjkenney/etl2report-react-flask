@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Button from './Button';
 
-export default function NewTemplate() {
+export default function NewTemplate({ onFileSelect }) {
     const [formData, setFormData] = useState({
         reportFile: null,
         templateName: '',
@@ -14,6 +14,11 @@ export default function NewTemplate() {
             ...prev,
             reportFile: file
         }));
+        
+        // Pass the file to the parent (Actions -> Dashboard) to display in the main View component
+        if (onFileSelect) {
+            onFileSelect(file);
+        }
     };
 
     const handleInputChange = (e) => {
@@ -62,6 +67,11 @@ export default function NewTemplate() {
                         className="w-full px-3 py-2 border border-theme-primary rounded-md bg-theme-secondary text-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-theme-primary file:text-theme-secondary hover:file:bg-opacity-80"
                         accept=".pdf"
                     />
+                    {formData.reportFile && (
+                        <p className="text-sm text-theme-primary/70 mt-1">
+                            Selected: {formData.reportFile.name} ({Math.round(formData.reportFile.size / 1024)} KB)
+                        </p>
+                    )}
                 </div>
 
                 <div>
