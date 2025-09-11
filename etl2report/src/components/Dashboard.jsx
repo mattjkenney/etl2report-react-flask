@@ -5,6 +5,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 export default function Dashboard() {
     const [actionsWidth, setActionsWidth] = useState(20);
     const [isResizing, setIsResizing] = useState(false);
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [documentHeight, setDocumentHeight] = useState('auto');
     
     const containerRef = useRef(null);
 
@@ -29,6 +31,11 @@ export default function Dashboard() {
         setIsResizing(false);
     }, []);
 
+    const handleDocumentHeightChange = useCallback((height) => {
+        console.log('Dashboard received height:', height);
+        setDocumentHeight(height);
+    }, []);
+
     useEffect(() => {
         if (isResizing) {
             document.addEventListener('mousemove', handleMouseMove);
@@ -50,14 +57,25 @@ export default function Dashboard() {
         };
     }, [isResizing, handleMouseMove, handleMouseUp]);
 
+    // Calculate dashboard minimum height
+    const dashboardMinHeight = documentHeight === 'auto' || documentHeight === null 
+        ? '100vh' 
+        : `${Math.max(documentHeight, 600)}px`; // Ensure minimum 600px height
+
     return (
-        <div ref={containerRef} className="flex dashboard-container">
+        <div 
+            ref={containerRef} 
+            className="flex dashboard-container"
+            style={{ 
+                minHeight: dashboardMinHeight
+            }}
+        >
             {/* Actions component */}
             <div 
                 className="flex-shrink-0" 
                 style={{ width: actionsWidth + '%' }}
             >
-                <Actions />
+                <Actions onFileSelect={setSelectedFile} selectedFile={selectedFile} />
             </div>
             
             {/* Resize handle */}
@@ -71,7 +89,10 @@ export default function Dashboard() {
             <div 
                 className="flex-grow"
             >
-                <View />
+                <View 
+                    file={selectedFile} 
+                    onDocumentHeightChange={handleDocumentHeightChange}
+                />
             </div>
         </div>
     )
