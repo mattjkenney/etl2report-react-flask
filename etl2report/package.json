@@ -12,11 +12,13 @@
     "css:watch": "tailwindcss -i src/input.css -o src/output.css --watch"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.9.0",
     "@tailwindcss/cli": "^4.1.13",
     "@tailwindcss/vite": "^4.1.13",
     "pdfjs-dist": "^5.4.149",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-redux": "^9.2.0",
     "tailwindcss": "^4.1.13"
   },
   "devDependencies": {
