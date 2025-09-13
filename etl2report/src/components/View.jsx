@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set the worker source with fallback options
@@ -16,7 +16,6 @@ try {
 
 export default function View({ file, onDocumentHeightChange }) {
     const canvasRef = useRef(null);
-    const viewContainerRef = useRef(null);
     const [pdf, setPdf] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(0);
@@ -25,39 +24,11 @@ export default function View({ file, onDocumentHeightChange }) {
     const [scale, setScale] = useState(1.5);
     const [renderingPage, setRenderingPage] = useState(false);
 
-    useEffect(() => {
-        if (!file) {
-            setPdf(null);
-            setTotalPages(0);
-            setCurrentPage(1);
-            setError(null);
-            // Reset document height when no file is selected
-            if (onDocumentHeightChange) {
-                onDocumentHeightChange('auto');
-            }
-            // Clear canvas when no file is selected
-            if (canvasRef.current) {
-                const context = canvasRef.current.getContext('2d');
-                context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-            }
-            return;
-        }
-
-        loadPdf();
-    }, [file, onDocumentHeightChange]);
-
-    useEffect(() => {
-        if (pdf && currentPage && !loading) {
-            renderPage(currentPage);
-        }
-    }, [pdf, currentPage, scale]);
-
     // Calculate and report the actual document height based on canvas and UI elements
-    const updateDocumentHeight = () => {
-        if (!onDocumentHeightChange || !viewContainerRef.current) return;
+    const updateDocumentHeight = useCallback(() => {
+        if (!onDocumentHeightChange) return;
 
         // Get the actual heights of UI elements
-        const viewContainer = viewContainerRef.current;
         const headerHeight = 60; // Approximate height of title
         const fileInfoHeight = file ? 50 : 0; // File info section
         const controlsHeight = file ? 70 : 0; // Controls section
@@ -82,14 +53,9 @@ export default function View({ file, onDocumentHeightChange }) {
         });
 
         onDocumentHeightChange(totalContentHeight);
-    };
+    }, [onDocumentHeightChange, file, loading, renderingPage, error]);
 
-    // Update height when canvas or content changes
-    useEffect(() => {
-        updateDocumentHeight();
-    }, [pdf, currentPage, scale, loading, renderingPage, error, file]);
-
-    const loadPdf = async () => {
+    const loadPdf = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
@@ -149,9 +115,9 @@ export default function View({ file, onDocumentHeightChange }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [file]);
 
-    const renderPage = async (pageNumber) => {
+    const renderPage = useCallback(async (pageNumber) => {
         if (!pdf || !canvasRef.current || renderingPage) return;
 
         try {
@@ -198,7 +164,39 @@ export default function View({ file, onDocumentHeightChange }) {
         } finally {
             setRenderingPage(false);
         }
-    };
+    }, [pdf, renderingPage, scale, updateDocumentHeight]);
+
+    useEffect(() => {
+        if (!file) {
+            setPdf(null);
+            setTotalPages(0);
+            setCurrentPage(1);
+            setError(null);
+            // Reset document height when no file is selected
+            if (onDocumentHeightChange) {
+                onDocumentHeightChange('auto');
+            }
+            // Clear canvas when no file is selected
+            if (canvasRef.current) {
+                const context = canvasRef.current.getContext('2d');
+                context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            }
+            return;
+        }
+
+        loadPdf();
+    }, [file, loadPdf, onDocumentHeightChange]);
+
+    useEffect(() => {
+        if (pdf && currentPage && !loading) {
+            renderPage(currentPage);
+        }
+    }, [pdf, currentPage, scale, loading, renderPage]);
+
+    // Update height when canvas or content changes
+    useEffect(() => {
+        updateDocumentHeight();
+    }, [updateDocumentHeight]);
 
     const goToPreviousPage = () => {
         if (currentPage > 1 && !renderingPage) {
@@ -234,7 +232,6 @@ export default function View({ file, onDocumentHeightChange }) {
 
     return (
         <div 
-            ref={viewContainerRef}
             className="bg-theme-secondary border border-theme-primary rounded-lg p-4 dashboard-content"
         >
             <h2 className="text-lg font-semibold text-theme-primary mb-4">View</h2>

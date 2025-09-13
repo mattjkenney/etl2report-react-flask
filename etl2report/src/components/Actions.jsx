@@ -2,7 +2,7 @@
 import Button from './Button';
 import NewTemplate from './NewTemplate';
 
-export default function Actions({ onFileSelect, selectedFile }) {
+export default function Actions({ onFileSelect }) {
     const [selectedTemplate, setSelectedTemplate] = useState('');
     const [showNewTemplate, setShowNewTemplate] = useState(false);
 
@@ -19,27 +19,6 @@ export default function Actions({ onFileSelect, selectedFile }) {
         // Clear the selected file when going back
         if (onFileSelect) {
             onFileSelect(null);
-        }
-    };
-
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        console.log('File selected:', file);
-        
-        if (file && file.type === 'application/pdf') {
-            console.log('Valid PDF file:', file.name, file.size, 'bytes');
-            if (onFileSelect) {
-                onFileSelect(file);
-            }
-        } else if (file) {
-            console.log('Invalid file type:', file.type);
-            alert('Please select a PDF file');
-            e.target.value = '';
-        } else {
-            console.log('No file selected');
-            if (onFileSelect) {
-                onFileSelect(null);
-            }
         }
     };
 

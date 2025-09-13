@@ -1,48 +1,20 @@
-import { useState } from 'react'
+import { useSelector, useDispatch } from 'react-redux'
 import Layout from './components/Layout'
 import Login from './components/Login'
 import Button from './components/Button'
 import Dashboard from './components/Dashboard'
-//import { useTheme } from './contexts/ThemeContext'
+import { showLogin, logout } from './store/auth/index.js'
 
 function App() {
-  //const [count, setCount] = useState(0)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [user, setUser] = useState(null)
-  const [showLoginForm, setShowLoginForm] = useState(false)
-  //const { currentTheme } = useTheme()
-
-  const handleLogin = async (loginData) => {
-    // Simulate authentication
-    console.log('Login attempt:', loginData)
-    
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    // For demo purposes, accept any login
-    setUser({ username: loginData.username })
-    setIsLoggedIn(true)
-    setShowLoginForm(false) // Hide login form after successful login
-  }
+  const dispatch = useDispatch()
+  const { user, isLoggedIn, showLoginForm } = useSelector(state => state.auth.user)
 
   const handleShowLogin = () => {
-    setShowLoginForm(true)
-  }
-
-  const handleSignup = () => {
-    // Handle signup navigation or modal
-    console.log('Signup clicked')
-    alert('Signup functionality would redirect to signup page or open signup modal')
-    // In a real app, you might:
-    // - Navigate to a signup route
-    // - Open a signup modal
-    // - Switch to a signup component
+    dispatch(showLogin(true))
   }
 
   const handleLogout = () => {
-    setUser(null)
-    setIsLoggedIn(false)
-    setShowLoginForm(false)
+    dispatch(logout())
   }
 
   return (
@@ -55,10 +27,7 @@ function App() {
       {(!isLoggedIn && showLoginForm) ? (
         <div className="space-y-6">
           <div className="max-w-md mx-auto">
-            <Login 
-              onLogin={handleLogin} 
-              onSignup={handleSignup}
-            />
+            <Login />
           </div>
         </div>
       ) : isLoggedIn ? (
