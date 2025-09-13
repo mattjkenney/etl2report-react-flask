@@ -1,40 +1,35 @@
 import Actions from './Actions'
 import View from './View'
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { setActionsWidth, setIsResizing } from '../store/dash/sizing.js';
 
 export default function Dashboard() {
-    const [actionsWidth, setActionsWidth] = useState(20);
-    const [isResizing, setIsResizing] = useState(false);
+    const dispatch = useDispatch();
+    const { actionsWidth, isResizing, documentHeight } = useSelector(state => state.sizing);
     const [selectedFile, setSelectedFile] = useState(null);
-    const [documentHeight, setDocumentHeight] = useState('auto');
     
     const containerRef = useRef(null);
 
     const handleMouseDown = useCallback((e) => {
         e.preventDefault();
-        setIsResizing(true);
-    }, []);
+        dispatch(setIsResizing(true));
+    }, [dispatch]);
 
     const handleMouseMove = useCallback((e) => {
         if (isResizing && containerRef.current) {
             const containerRect = containerRef.current.getBoundingClientRect();
-            const newWidth = e.clientX - containerRect.left;
-            const newWidthPercent = (newWidth / containerRect.width) * 100;
-            
-            if (newWidthPercent > 10 && newWidthPercent < 90) {
-                setActionsWidth(newWidthPercent);
-            }
+            dispatch(setActionsWidth({ 
+                containerLeft: containerRect.left,
+                containerWidth: containerRect.width,
+                clientX: e.clientX 
+            }));
         }
-    }, [isResizing]);
+    }, [isResizing, dispatch]);
 
     const handleMouseUp = useCallback(() => {
-        setIsResizing(false);
-    }, []);
-
-    const handleDocumentHeightChange = useCallback((height) => {
-        console.log('Dashboard received height:', height);
-        setDocumentHeight(height);
-    }, []);
+        dispatch(setIsResizing(false));
+    }, [dispatch]);
 
     useEffect(() => {
         if (isResizing) {
@@ -75,7 +70,7 @@ export default function Dashboard() {
                 className="flex-shrink-0" 
                 style={{ width: actionsWidth + '%' }}
             >
-                <Actions onFileSelect={setSelectedFile} selectedFile={selectedFile} />
+                <Actions onFileSelect={setSelectedFile} />
             </div>
             
             {/* Resize handle */}
@@ -89,10 +84,7 @@ export default function Dashboard() {
             <div 
                 className="flex-grow"
             >
-                <View 
-                    file={selectedFile} 
-                    onDocumentHeightChange={handleDocumentHeightChange}
-                />
+                <View file={selectedFile} />
             </div>
         </div>
     )

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useDispatch } from 'react-redux';
+import { setDocumentHeight } from '../store/dash/sizing.js';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set the worker source with fallback options
@@ -14,7 +16,8 @@ try {
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 }
 
-export default function View({ file, onDocumentHeightChange }) {
+export default function View({ file }) {
+    const dispatch = useDispatch();
     const canvasRef = useRef(null);
     const [pdf, setPdf] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
@@ -26,8 +29,6 @@ export default function View({ file, onDocumentHeightChange }) {
 
     // Calculate and report the actual document height based on canvas and UI elements
     const updateDocumentHeight = useCallback(() => {
-        if (!onDocumentHeightChange) return;
-
         // Get the actual heights of UI elements
         const headerHeight = 60; // Approximate height of title
         const fileInfoHeight = file ? 50 : 0; // File info section
@@ -41,19 +42,9 @@ export default function View({ file, onDocumentHeightChange }) {
         const totalContentHeight = headerHeight + fileInfoHeight + controlsHeight + 
                                  canvasHeight + canvasPadding + errorLoadingHeight + noFileHeight + 32; // Extra padding
 
-        console.log('Height calculation:', {
-            headerHeight,
-            fileInfoHeight,
-            controlsHeight,
-            canvasHeight,
-            canvasPadding,
-            errorLoadingHeight,
-            noFileHeight,
-            totalContentHeight
-        });
 
-        onDocumentHeightChange(totalContentHeight);
-    }, [onDocumentHeightChange, file, loading, renderingPage, error]);
+        dispatch(setDocumentHeight(totalContentHeight));
+    }, [dispatch, file, loading, renderingPage, error]);
 
     const loadPdf = useCallback(async () => {
         try {
@@ -173,9 +164,7 @@ export default function View({ file, onDocumentHeightChange }) {
             setCurrentPage(1);
             setError(null);
             // Reset document height when no file is selected
-            if (onDocumentHeightChange) {
-                onDocumentHeightChange('auto');
-            }
+            dispatch(setDocumentHeight('auto'));
             // Clear canvas when no file is selected
             if (canvasRef.current) {
                 const context = canvasRef.current.getContext('2d');
@@ -185,7 +174,7 @@ export default function View({ file, onDocumentHeightChange }) {
         }
 
         loadPdf();
-    }, [file, loadPdf, onDocumentHeightChange]);
+    }, [file, loadPdf, dispatch]);
 
     useEffect(() => {
         if (pdf && currentPage && !loading) {
