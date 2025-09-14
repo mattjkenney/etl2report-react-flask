@@ -11,13 +11,23 @@ const Button = ({
   type = 'button',
   ...props 
 }) => {
-  const baseClasses = 'font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors';
+  const handleClick = (e) => {
+    if (onClick) {
+      onClick(e);
+    }
+    // Blur the button after click to prevent persistent focus styles
+    setTimeout(() => {
+      e.target.blur();
+    }, 150); // Small delay to allow transition to complete
+  };
+
+  const baseClasses = 'font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 border border-transparent hover:shadow-md';
   
   const variantClasses = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500',
-    danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500',
-    secondary: 'bg-theme-secondary hover:bg-theme-tertiary text-theme-primary border border-theme-primary focus:ring-blue-500',
-    ghost: 'text-theme-primary hover:bg-theme-secondary focus:ring-blue-500'
+    primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.blue.400)]',
+    danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.red.400)]',
+    secondary: 'bg-theme-secondary hover:bg-theme-tertiary text-theme-primary border border-theme-primary focus:ring-blue-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.blue.400)] hover:shadow-lg',
+    ghost: 'text-theme-primary hover:bg-theme-secondary focus:ring-blue-500 hover:border-white hover:shadow-[0_0_0_3px_var(--color-border)]'
   };
   
   const sizeClasses = {
@@ -46,7 +56,7 @@ const Button = ({
   return (
     <button
       type={type}
-      onClick={onClick}
+      onClick={handleClick}
       disabled={disabled || loading}
       className={combinedClasses}
       {...props}
