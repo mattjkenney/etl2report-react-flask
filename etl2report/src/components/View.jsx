@@ -1,7 +1,191 @@
+import { useState } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { Document, Page, pdfjs } from 'react-pdf';
+import { setCurrentPage, setTotalPages, setScale, setLoading, setError } from '../store/dash/pdfViewer';
+
+// Use local worker file with matching version to avoid CORS and version mismatch issues
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+
+// Import CSS for react-pdf
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+
 export default function View() {
+    const dispatch = useDispatch();
+    const pdfViewer = useSelector((state) => state.pdfViewer);
+    const { pdfUrl, currentPage, totalPages, scale, isLoading, error } = pdfViewer;
+    
+    const [numPages, setNumPages] = useState(null);
+
+    const onDocumentLoadSuccess = ({ numPages }) => {
+        console.log('PDF loaded successfully:', numPages, 'pages');
+        setNumPages(numPages);
+        dispatch(setTotalPages(numPages));
+        dispatch(setCurrentPage(1));
+        dispatch(setLoading(false));
+    };
+
+    const onDocumentLoadError = (error) => {
+        console.error('Error loading PDF:', error);
+        dispatch(setError(`Failed to load PDF: ${error.message || 'Unknown error'}`));
+        dispatch(setLoading(false));
+    };
+
+    const onLoadStart = () => {
+        console.log('Starting to load PDF:', pdfUrl);
+        dispatch(setLoading(true));
+        dispatch(setError(null));
+    };
+
+    const goToPreviousPage = () => {
+        if (currentPage > 1) {
+            dispatch(setCurrentPage(currentPage - 1));
+        }
+    };
+
+    const goToNextPage = () => {
+        if (currentPage < totalPages) {
+            dispatch(setCurrentPage(currentPage + 1));
+        }
+    };
+
+    const zoomIn = () => {
+        dispatch(setScale(Math.min(scale + 0.25, 3.0)));
+    };
+
+    const zoomOut = () => {
+        dispatch(setScale(Math.max(scale - 0.25, 0.5)));
+    };
+
+    console.log('PDF.js version from react-pdf:', pdfjs.version);
+    console.log('Worker URL:', pdfjs.GlobalWorkerOptions.workerSrc);
+
+    if (!pdfUrl) {
+        return (
+            <div className="flex items-center justify-center h-full bg-theme-secondary border border-theme-primary rounded-lg p-8">
+                <div className="text-center">
+                    <h2 className="text-xl font-semibold text-theme-primary mb-2">No PDF Selected</h2>
+                    <p className="text-theme-primary/70">Select a PDF file in the Actions panel to view it here.</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-full bg-theme-secondary border border-theme-primary rounded-lg p-8">
+                <div className="text-center">
+                    <h2 className="text-xl font-semibold text-red-500 mb-2">Error Loading PDF</h2>
+                    <p className="text-theme-primary/70 mb-4">{error}</p>
+                    <div className="space-y-2">
+                        <button 
+                            onClick={() => {
+                                dispatch(setError(null));
+                                dispatch(setLoading(true));
+                            }}
+                            className="block mx-auto px-4 py-2 bg-theme-primary text-theme-secondary rounded hover:bg-opacity-80"
+                        >
+                            Retry Loading PDF
+                        </button>
+                        <p className="text-xs text-theme-primary/50">
+                            PDF.js v{pdfjs.version} | Worker: {pdfjs.GlobalWorkerOptions.workerSrc}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <>
-            <h1>View</h1>
-        </>
-    )
+        <div className="h-full bg-theme-secondary border border-theme-primary rounded-lg flex flex-col">
+            {/* PDF Controls */}
+            <div className="flex items-center justify-between p-4 border-b border-theme-primary">
+                <div className="flex items-center space-x-4">
+                    <button
+                        onClick={goToPreviousPage}
+                        disabled={currentPage <= 1 || isLoading}
+                        className="px-3 py-1 bg-theme-primary text-theme-secondary rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-opacity-80"
+                    >
+                        Previous
+                    </button>
+                    
+                    <span className="text-theme-primary">
+                        Page {currentPage} of {totalPages}
+                    </span>
+                    
+                    <button
+                        onClick={goToNextPage}
+                        disabled={currentPage >= totalPages || isLoading}
+                        className="px-3 py-1 bg-theme-primary text-theme-secondary rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-opacity-80"
+                    >
+                        Next
+                    </button>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                    <button
+                        onClick={zoomOut}
+                        disabled={scale <= 0.5 || isLoading}
+                        className="px-3 py-1 bg-theme-primary text-theme-secondary rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-opacity-80"
+                    >
+                        Zoom Out
+                    </button>
+                    
+                    <span className="text-theme-primary min-w-[60px] text-center">
+                        {Math.round(scale * 100)}%
+                    </span>
+                    
+                    <button
+                        onClick={zoomIn}
+                        disabled={scale >= 3.0 || isLoading}
+                        className="px-3 py-1 bg-theme-primary text-theme-secondary rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-opacity-80"
+                    >
+                        Zoom In
+                    </button>
+                </div>
+            </div>
+
+            {/* PDF Document Container */}
+            <div className="flex-1 overflow-auto p-4 bg-gray-100">
+                <div className="flex justify-center">
+                    <Document
+                        file={pdfUrl}
+                        onLoadStart={onLoadStart}
+                        onLoadSuccess={onDocumentLoadSuccess}
+                        onLoadError={onDocumentLoadError}
+                        loading={
+                            <div className="flex items-center justify-center p-8">
+                                <div className="text-theme-primary">Loading PDF...</div>
+                            </div>
+                        }
+                        error={
+                            <div className="flex items-center justify-center p-8">
+                                <div className="text-red-500">Failed to load PDF document</div>
+                            </div>
+                        }
+                    >
+                        {!isLoading && numPages && (
+                            <Page
+                                pageNumber={currentPage}
+                                scale={scale}
+                                renderTextLayer={true}
+                                renderAnnotationLayer={true}
+                                className="border border-gray-300 shadow-lg"
+                                loading={
+                                    <div className="flex items-center justify-center p-8">
+                                        <div className="text-theme-primary">Rendering page...</div>
+                                    </div>
+                                }
+                                error={
+                                    <div className="flex items-center justify-center p-8">
+                                        <div className="text-red-500">Failed to render page</div>
+                                    </div>
+                                }
+                            />
+                        )}
+                    </Document>
+                </div>
+            </div>
+        </div>
+    );
 }
