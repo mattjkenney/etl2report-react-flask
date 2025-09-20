@@ -1,13 +1,12 @@
 import Actions from './Actions'
 import View from './View'
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { setActionsWidth, setIsResizing } from '../store/dash/sizing.js';
 
 export default function Dashboard() {
     const dispatch = useDispatch();
-    const { actionsWidth, isResizing, documentHeight } = useSelector(state => state.sizing);
-    const [selectedFile, setSelectedFile] = useState(null);
+    const { actionsWidth, isResizing } = useSelector(state => state.sizing);
     
     const containerRef = useRef(null);
 
@@ -53,9 +52,7 @@ export default function Dashboard() {
     }, [isResizing, handleMouseMove, handleMouseUp]);
 
     // Calculate dashboard minimum height
-    const dashboardMinHeight = documentHeight === 'auto' || documentHeight === null 
-        ? '100vh' 
-        : `${Math.max(documentHeight, 600)}px`; // Ensure minimum 600px height
+    const dashboardMinHeight = 'auto';
 
     return (
         <div 
@@ -70,7 +67,7 @@ export default function Dashboard() {
                 className="flex-shrink-0" 
                 style={{ width: actionsWidth + '%' }}
             >
-                <Actions onFileSelect={setSelectedFile} />
+                <Actions />
             </div>
             
             {/* Resize handle */}
@@ -84,7 +81,7 @@ export default function Dashboard() {
             <div 
                 className="flex-grow"
             >
-                <View file={selectedFile} />
+                <View />
             </div>
         </div>
     )

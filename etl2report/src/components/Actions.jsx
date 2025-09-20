@@ -1,8 +1,11 @@
 ﻿import { useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { setReportFile } from '../store/dash/actions/newTemplate';
 import Button from './Button';
 import NewTemplate from './NewTemplate';
 
-export default function Actions({ onFileSelect }) {
+export default function Actions() {
+    const dispatch = useDispatch();
     const [selectedTemplate, setSelectedTemplate] = useState('');
     const [showNewTemplate, setShowNewTemplate] = useState(false);
 
@@ -16,10 +19,8 @@ export default function Actions({ onFileSelect }) {
 
     const handleBackToActions = () => {
         setShowNewTemplate(false);
-        // Clear the selected file when going back
-        if (onFileSelect) {
-            onFileSelect(null);
-        }
+        // Clear the file metadata when going back
+        dispatch(setReportFile(null));
     };
 
     const isTemplateSelected = selectedTemplate !== '';
@@ -37,7 +38,7 @@ export default function Actions({ onFileSelect }) {
                         type="button"
                     />
                 </div>
-                <NewTemplate onFileSelect={onFileSelect} />
+                <NewTemplate />
             </div>
         );
     }

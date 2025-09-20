@@ -8,4 +8,12 @@ export default defineConfig({
         react(),
         tailwindcss()
     ],
+    optimizeDeps: {
+        include: ['pdfjs-dist']
+    },
+    assetsInclude: ['**/*.pdf'],
+    define: {
+        // This helps with PDF.js worker loading
+        global: 'globalThis',
+    }
 })
