@@ -1,49 +1,81 @@
+import { useSelector, useDispatch } from 'react-redux';
 import { useState } from 'react';
+import { setReportFile, updateFormField } from '../store/dash/actions/newTemplate';
 import Button from './Button';
 
-export default function NewTemplate({ onFileSelect }) {
-    const [formData, setFormData] = useState({
-        reportFile: null,
-        templateName: '',
-        description: ''
-    });
+export default function NewTemplate() {
+    const dispatch = useDispatch();
+    const formData = useSelector((state) => state.newTemplate);
+    
+    // Keep the actual File object in local state
+    const [actualFile, setActualFile] = useState(null);
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
-        setFormData(prev => ({
-            ...prev,
-            reportFile: file
-        }));
+        console.log('File selected in NewTemplate:', file ? file.name : 'null', file?.type);
         
-        // Pass the file to the parent (Actions -> Dashboard) to display in the main View component
-        if (onFileSelect) {
-            onFileSelect(file);
+        if (file) {
+            // Validate file type
+            if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+                alert('Please select a PDF file');
+                e.target.value = ''; // Clear the input
+                return;
+            }
+            
+            // Validate file size (50MB limit)
+            if (file.size > 50 * 1024 * 1024) {
+                alert('PDF file is too large (max 50MB)');
+                e.target.value = ''; // Clear the input
+                return;
+            }
+            
+            console.log('Storing file metadata in Redux store:', file.name);
+            // Store the actual File object locally
+            setActualFile(file);
+            
+            // Extract only serializable metadata for Redux
+            const fileMetadata = {
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                lastModified: file.lastModified
+            };
+            
+            // Dispatch only serializable metadata
+            dispatch(setReportFile(fileMetadata));
+        } else {
+            setActualFile(null);
+            dispatch(setReportFile(null));
         }
     };
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
+        dispatch(updateFormField({ name, value }));
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
         
         // Basic validation for required field
-        if (!formData.reportFile) {
+        if (!formData.reportFile || !actualFile) {
             alert('Please select a report file');
             return;
         }
 
-        // Handle form submission logic here
-        console.log('Form submitted:', formData);
+        // Handle form submission logic here with the actual file
+        console.log('Form submitted:', { 
+            ...formData, 
+            actualFile: actualFile // Use the actual File object for processing
+        });
         alert('Template creation initiated!');
+        
+        // Optionally reset the form after submission
+        // setActualFile(null);
+        // dispatch(resetForm());
     };
 
-    const isFormValid = formData.reportFile !== null;
+    const isFormValid = formData.reportFile !== null && actualFile !== null;
 
     return (
         <div className="bg-theme-secondary border border-theme-primary rounded-lg p-4 dashboard-content">
@@ -65,7 +97,7 @@ export default function NewTemplate({ onFileSelect }) {
                         required
                         onChange={handleFileChange}
                         className="w-full px-3 py-2 border border-theme-primary rounded-md bg-theme-secondary text-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-theme-primary file:text-theme-secondary hover:file:bg-opacity-80"
-                        accept=".pdf"
+                        accept=".pdf,application/pdf"
                     />
                     {formData.reportFile && (
                         <p className="text-sm text-theme-primary/70 mt-1">
@@ -109,7 +141,6 @@ export default function NewTemplate({ onFileSelect }) {
                         placeholder="Describe what this report does..."
                     />
                 </div>
-
                 <div className="pt-4">
                     <Button
                         displayText="Create Template"
