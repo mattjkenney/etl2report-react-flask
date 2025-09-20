@@ -1,6 +1,7 @@
 ﻿import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { setReportFile } from '../store/dash/actions/newTemplate';
+import { resetPdfViewer } from '../store/dash/pdfViewer';
 import Button from './Button';
 import NewTemplate from './NewTemplate';
 
@@ -21,6 +22,8 @@ export default function Actions() {
         setShowNewTemplate(false);
         // Clear the file metadata when going back
         dispatch(setReportFile(null));
+        // Clear the PDF viewer
+        dispatch(resetPdfViewer());
     };
 
     const isTemplateSelected = selectedTemplate !== '';

@@ -1,6 +1,7 @@
 import { useSelector, useDispatch } from 'react-redux';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { setReportFile, updateFormField } from '../store/dash/actions/newTemplate';
+import { setPdfUrl, resetPdfViewer } from '../store/dash/pdfViewer';
 import Button from './Button';
 
 export default function NewTemplate() {
@@ -9,10 +10,26 @@ export default function NewTemplate() {
     
     // Keep the actual File object in local state
     const [actualFile, setActualFile] = useState(null);
+    const [currentPdfUrl, setCurrentPdfUrl] = useState(null);
+
+    // Cleanup object URL when component unmounts or file changes
+    useEffect(() => {
+        return () => {
+            if (currentPdfUrl) {
+                URL.revokeObjectURL(currentPdfUrl);
+            }
+        };
+    }, [currentPdfUrl]);
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         console.log('File selected in NewTemplate:', file ? file.name : 'null', file?.type);
+        
+        // Clean up previous URL
+        if (currentPdfUrl) {
+            URL.revokeObjectURL(currentPdfUrl);
+            setCurrentPdfUrl(null);
+        }
         
         if (file) {
             // Validate file type
@@ -43,9 +60,15 @@ export default function NewTemplate() {
             
             // Dispatch only serializable metadata
             dispatch(setReportFile(fileMetadata));
+            
+            // Create object URL for PDF viewing and store in Redux
+            const pdfUrl = URL.createObjectURL(file);
+            setCurrentPdfUrl(pdfUrl);
+            dispatch(setPdfUrl(pdfUrl));
         } else {
             setActualFile(null);
             dispatch(setReportFile(null));
+            dispatch(resetPdfViewer());
         }
     };
 
