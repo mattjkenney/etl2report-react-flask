@@ -30,5 +30,5 @@ dist-ssr
 *.sln
 *.sw?
 
-# Development-only files that shouldn't be deployed to production
-public/dev/
+# Exclude dev files from production dist (but keep them in source)
+dist/dev/
