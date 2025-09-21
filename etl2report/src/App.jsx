@@ -45,9 +45,6 @@ function App() {
                             variant="primary"
                             size="medium"
                         />
-                        {/*Demo area for Button component. Uncomment only during development to see 
-                         the effect of various props on the Button component*/}
-                        {/*<ButtonDemo />*/}
                     </div>
                 </div>
             )}

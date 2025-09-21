@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Button Component Demo</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        /* Import theme variables and basic styling */
+        :root {
+            --color-text: #1f2937;
+            --color-text-secondary: #6b7280;
+            --color-text-muted: #9ca3af;
+            --color-background: #ffffff;
+            --color-background-secondary: #f9fafb;
+            --color-background-tertiary: #f3f4f6;
+            --color-border: #e5e7eb;
+            --color-border-secondary: #d1d5db;
+            --color-primary: #3b82f6;
+            --color-primary-hover: #2563eb;
+            --color-primary-light: #dbeafe;
+            --color-success: #10b981;
+            --color-success-light: #d1fae5;
+            --color-warning: #f59e0b;
+            --color-warning-light: #fef3c7;
+            --color-error: #ef4444;
+            --color-error-light: #fee2e2;
+            --color-shadow: rgba(0, 0, 0, 0.1);
+            --color-shadow-lg: rgba(0, 0, 0, 0.15);
+            --color-gray-400: #9ca3af;
+            --color-blue-400: #60a5fa;
+            --color-red-400: #f87171;
+            --color-white: #ffffff;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-text: #f9fafb;
+                --color-text-secondary: #d1d5db;
+                --color-text-muted: #9ca3af;
+                --color-background: #111827;
+                --color-background-secondary: #1f2937;
+                --color-background-tertiary: #374151;
+                --color-border: #374151;
+                --color-border-secondary: #4b5563;
+                --color-primary: #60a5fa;
+                --color-primary-hover: #3b82f6;
+                --color-primary-light: #1e3a8a;
+                --color-success: #34d399;
+                --color-success-light: #064e3b;
+                --color-warning: #fbbf24;
+                --color-warning-light: #92400e;
+                --color-error: #f87171;
+                --color-error-light: #7f1d1d;
+                --color-shadow: rgba(0, 0, 0, 0.3);
+                --color-shadow-lg: rgba(0, 0, 0, 0.5);
+                --color-gray-400: #6b7280;
+                --color-blue-400: #60a5fa;
+                --color-red-400: #f87171;
+                --color-white: #ffffff;
+            }
+        }
+
+        .dark {
+            --color-text: #f9fafb;
+            --color-text-secondary: #d1d5db;
+            --color-text-muted: #9ca3af;
+            --color-background: #111827;
+            --color-background-secondary: #1f2937;
+            --color-background-tertiary: #374151;
+            --color-border: #374151;
+            --color-border-secondary: #4b5563;
+            --color-primary: #60a5fa;
+            --color-primary-hover: #3b82f6;
+            --color-primary-light: #1e3a8a;
+            --color-success: #34d399;
+            --color-success-light: #064e3b;
+            --color-warning: #fbbf24;
+            --color-warning-light: #92400e;
+            --color-error: #f87171;
+            --color-error-light: #7f1d1d;
+            --color-shadow: rgba(0, 0, 0, 0.3);
+            --color-shadow-lg: rgba(0, 0, 0, 0.5);
+            --color-gray-400: #6b7280;
+            --color-blue-400: #60a5fa;
+            --color-red-400: #f87171;
+            --color-white: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: ui-sans-serif, system-ui, sans-serif;
+            background-color: var(--color-background);
+            color: var(--color-text);
+            min-height: 100vh;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        /* Theme utility classes */
+        .text-theme-primary { color: var(--color-text); }
+        .text-theme-secondary { color: var(--color-text-secondary); }
+        .bg-theme-primary { background-color: var(--color-background); }
+        
+        /* Basic utility classes */
+        .p-8 { padding: 2rem; }
+        .space-y-6 > * + * { margin-top: 1.5rem; }
+        .space-y-4 > * + * { margin-top: 1rem; }
+        .space-y-2 > * + * { margin-top: 0.5rem; }
+        .flex { display: flex; }
+        .justify-between { justify-content: space-between; }
+        .items-center { align-items: center; }
+        .items-end { align-items: flex-end; }
+        .gap-4 { gap: 1rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-4 { margin-bottom: 1rem; }
+        .ml-2 { margin-left: 0.5rem; }
+        .text-2xl { font-size: 1.5rem; line-height: 2rem; }
+        .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+        .font-bold { font-weight: 700; }
+        .font-semibold { font-weight: 600; }
+        .inline-flex { display: inline-flex; }
+        .hidden { display: none; }
+        .w-5 { width: 1.25rem; }
+        .h-5 { height: 1.25rem; }
+        
+        @media (min-width: 640px) {
+            .sm\:inline { display: inline; }
+        }
+
+        /* Button styles */
+        button {
+            border-radius: 0.375rem;
+            border-width: 2px;
+            border-style: solid;
+            font-weight: 500;
+            transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Primary button */
+        .btn-primary {
+            background-color: var(--color-primary);
+            border-color: var(--color-primary);
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background-color: var(--color-primary-hover);
+            border-color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 0 3px var(--color-blue-400);
+        }
+
+        /* Danger button */
+        .btn-danger {
+            background-color: var(--color-error);
+            border-color: var(--color-error);
+            color: white;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background-color: #dc2626;
+            border-color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 0 3px var(--color-red-400);
+        }
+
+        /* Secondary button */
+        .btn-secondary {
+            background-color: transparent;
+            border-color: var(--color-border);
+            color: var(--color-text);
+        }
+        .btn-secondary:hover:not(:disabled) {
+            border-color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 0 3px var(--color-blue-400);
+        }
+
+        /* Ghost button */
+        .btn-ghost {
+            background-color: transparent;
+            border-color: transparent;
+            color: var(--color-text);
+        }
+        .btn-ghost:hover:not(:disabled) {
+            color: var(--color-blue-400);
+        }
+
+        /* Button sizes */
+        .btn-small { padding: 0.5rem 0.75rem; font-size: 0.875rem; }
+        .btn-medium { padding: 0.75rem 1rem; font-size: 1rem; }
+        .btn-large { padding: 1rem 1.5rem; font-size: 1.125rem; }
+
+        /* Spinner animation */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useContext, createContext } = React;
+
+        // Theme Context
+        const ThemeContext = createContext();
+
+        const ThemeProvider = ({ children }) => {
+            const [theme, setTheme] = useState('system');
+            const [currentTheme, setCurrentTheme] = useState('light');
+
+            const toggleTheme = () => {
+                const themes = ['system', 'light', 'dark'];
+                const currentIndex = themes.indexOf(theme);
+                const nextTheme = themes[(currentIndex + 1) % themes.length];
+                setTheme(nextTheme);
+
+                if (nextTheme === 'system') {
+                    const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                    setCurrentTheme(systemTheme);
+                    document.body.className = '';
+                } else {
+                    setCurrentTheme(nextTheme);
+                    document.body.className = nextTheme;
+                }
+            };
+
+            React.useEffect(() => {
+                const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                const handleChange = () => {
+                    if (theme === 'system') {
+                        setCurrentTheme(mediaQuery.matches ? 'dark' : 'light');
+                    }
+                };
+
+                mediaQuery.addEventListener('change', handleChange);
+                handleChange();
+
+                return () => mediaQuery.removeEventListener('change', handleChange);
+            }, [theme]);
+
+            return (
+                <ThemeContext.Provider value={{ theme, currentTheme, toggleTheme }}>
+                    {children}
+                </ThemeContext.Provider>
+            );
+        };
+
+        const useTheme = () => {
+            const context = useContext(ThemeContext);
+            if (!context) {
+                throw new Error('useTheme must be used within a ThemeProvider');
+            }
+            return context;
+        };
+
+        // Button Component
+        const Button = ({ 
+            displayText, 
+            variant = 'primary', 
+            size = 'medium',
+            loading = false,
+            disabled = false,
+            onClick,
+            className = '',
+            ...props 
+        }) => {
+            const getButtonClasses = () => {
+                let classes = `btn-${variant} btn-${size}`;
+                if (className) classes += ` ${className}`;
+                return classes;
+            };
+
+            const handleClick = (e) => {
+                if (loading || disabled) return;
+                if (onClick) onClick(e);
+            };
+
+            return (
+                <button
+                    className={getButtonClasses()}
+                    onClick={handleClick}
+                    disabled={disabled || loading}
+                    {...props}
+                >
+                    {loading ? (
+                        <div className="flex items-center">
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25"></circle>
+                                <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" opacity="0.75"></path>
+                            </svg>
+                            Loading...
+                        </div>
+                    ) : (
+                        displayText
+                    )}
+                </button>
+            );
+        };
+
+        // ThemeToggle Component
+        const ThemeToggle = ({ className = '' }) => {
+            const { theme, currentTheme, toggleTheme } = useTheme();
+
+            const getIcon = () => {
+                switch (currentTheme) {
+                    case 'dark':
+                        return (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                    d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                            </svg>
+                        );
+                    case 'light':
+                        return (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        );
+                    default:
+                        return (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        );
+                }
+            };
+
+            const getThemeLabel = () => {
+                switch (theme) {
+                    case 'dark':
+                        return 'Dark mode';
+                    case 'light':
+                        return 'Light mode';
+                    case 'system':
+                        return `System (${currentTheme})`;
+                    default:
+                        return 'Theme';
+                }
+            };
+
+            const handleThemeToggle = (e) => {
+                toggleTheme();
+                setTimeout(() => {
+                    e.currentTarget.blur();
+                }, 150);
+            };
+
+            const buttonContent = (
+                <>
+                    {getIcon()}
+                    <span className="ml-2 hidden sm:inline">{getThemeLabel()}</span>
+                </>
+            );
+
+            return (
+                <Button
+                    displayText={buttonContent}
+                    onClick={handleThemeToggle}
+                    variant="ghost"
+                    size="small"
+                    className={`inline-flex items-center justify-center ${className}`}
+                    title={getThemeLabel()}
+                />
+            );
+        };
+
+        // ButtonDemo Component
+        const ButtonDemo = () => {
+            return (
+                <div className="p-8 space-y-6 bg-theme-primary">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-2xl font-bold text-theme-primary mb-4">Button Component Demo</h2>
+                        <ThemeToggle />
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-theme-primary mb-2">Primary Button</h3>
+                            <p className="text-theme-secondary text-sm mb-2">Hover to see white inner border + blue-400 outer border</p>
+                            <Button 
+                                displayText="Primary Button" 
+                                variant="primary" 
+                                onClick={() => console.log('Primary clicked')}
+                            />
+                        </div>
+                        
+                        <div>
+                            <h3 className="text-lg font-semibold text-theme-primary mb-2">Danger Button</h3>
+                            <p className="text-theme-secondary text-sm mb-2">Hover to see white inner border + red-400 outer border</p>
+                            <Button 
+                                displayText="Danger Button" 
+                                variant="danger" 
+                                onClick={() => console.log('Danger clicked')}
+                            />
+                        </div>
+                        
+                        <div>
+                            <h3 className="text-lg font-semibold text-theme-primary mb-2">Secondary Button</h3>
+                            <p className="text-theme-secondary text-sm mb-2">Hover to see white inner border + blue-400 outer border</p>
+                            <Button 
+                                displayText="Secondary Button" 
+                                variant="secondary" 
+                                onClick={() => console.log('Secondary clicked')}
+                            />
+                        </div>
+                        
+                        <div>
+                            <h3 className="text-lg font-semibold text-theme-primary mb-2">Ghost Button</h3>
+                            <p className="text-theme-secondary text-sm mb-2">Appears as plain text until hovered - text changes to blue-400 on hover. Use for buttons that should be invisible until interaction.</p>
+                            <Button 
+                                displayText="Ghost Button" 
+                                variant="ghost" 
+                                onClick={() => console.log('Ghost clicked')}
+                            />
+                        </div>
+                        
+                        <div>
+                            <h3 className="text-lg font-semibold text-theme-primary mb-2">Different Sizes</h3>
+                            <div className="flex gap-4 items-end">
+                                <Button displayText="Small" variant="primary" size="small" />
+                                <Button displayText="Medium" variant="primary" size="medium" />
+                                <Button displayText="Large" variant="primary" size="large" />
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <h3 className="text-lg font-semibold text-theme-primary mb-2">Ghost Button Variants by Size</h3>
+                            <p className="text-theme-secondary text-sm mb-2">Ghost buttons at different sizes - all appear as plain text until hovered</p>
+                            <div className="flex gap-4 items-end">
+                                <Button displayText="Small Ghost" variant="ghost" size="small" />
+                                <Button displayText="Medium Ghost" variant="ghost" size="medium" />
+                                <Button displayText="Large Ghost" variant="ghost" size="large" />
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <h3 className="text-lg font-semibold text-theme-primary mb-2">Loading State</h3>
+                            <Button displayText="Loading..." variant="primary" loading={true} />
+                        </div>
+                        
+                        <div>
+                            <h3 className="text-lg font-semibold text-theme-primary mb-2">Disabled State</h3>
+                            <div className="flex gap-4 items-center">
+                                <Button displayText="Disabled Primary" variant="primary" disabled={true} />
+                                <Button displayText="Disabled Ghost" variant="ghost" disabled={true} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // App Component
+        const App = () => {
+            return (
+                <ThemeProvider>
+                    <ButtonDemo />
+                </ThemeProvider>
+            );
+        };
+
+        // Render the app
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>

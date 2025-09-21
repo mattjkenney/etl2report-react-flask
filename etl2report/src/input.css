@@ -351,4 +351,21 @@ button:focus:not(:focus-visible) {
   background-color: #3b82f6;
 }
 
+/* Missing overflow classes for Actions component scrolling */
+.overflow-y-auto {
+  overflow-y: auto;
+}
+
+.overflow-hidden {
+  overflow: hidden;
+}
+
+.overflow-x-auto {
+  overflow-x: auto;
+}
+
+.overflow-x-hidden {
+  overflow-x: hidden;
+}
+
 

@@ -21,13 +21,13 @@ const Button = ({
         }, 150); // Small delay to allow transition to complete
     };
 
-    const baseClasses = 'font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 border border-transparent hover:shadow-md';
+    const baseClasses = 'font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 border border-transparent';
 
     const variantClasses = {
-        primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.blue.400)]',
-        danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.red.400)]',
-        secondary: 'bg-theme-secondary hover:bg-theme-tertiary text-theme-primary border border-theme-primary focus:ring-blue-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.blue.400)] hover:shadow-lg',
-        ghost: 'text-theme-primary hover:text-blue-400 focus:ring-blue-500 hover:shadow-none'
+        primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.blue.400)] hover:shadow-md',
+        danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.red.400)] hover:shadow-md',
+        secondary: 'bg-theme-secondary hover:bg-theme-tertiary text-theme-primary border border-theme-primary focus:ring-blue-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.blue.400)] hover:shadow-md',
+        ghost: 'text-theme-primary hover:text-blue-400'
     };
 
     const sizeClasses = {
