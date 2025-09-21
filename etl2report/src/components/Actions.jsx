@@ -1,14 +1,29 @@
-﻿import { useState } from 'react';
-import { useDispatch } from 'react-redux';
+﻿import { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { setReportFile } from '../store/dash/actions/newTemplate';
 import { resetPdfViewer } from '../store/dash/pdfViewer';
+import { setActionsDefaultHeight } from '../store/dash/sizing';
 import Button from './Button';
 import NewTemplate from './NewTemplate';
 
 export default function Actions() {
     const dispatch = useDispatch();
+    const { actionsDefaultHeight } = useSelector(state => state.sizing);
     const [selectedTemplate, setSelectedTemplate] = useState('');
     const [showNewTemplate, setShowNewTemplate] = useState(false);
+
+    // Update default height based on window size - matches dashboard-container height
+    useEffect(() => {
+        const updateHeight = () => {
+            // Use the exact same calculation as .dashboard-container class: calc(100vh - 160px)
+            const newHeight = window.innerHeight - 160;
+            dispatch(setActionsDefaultHeight(newHeight));
+        };
+
+        updateHeight();
+        window.addEventListener('resize', updateHeight);
+        return () => window.removeEventListener('resize', updateHeight);
+    }, [dispatch]);
 
     const handleTemplateChange = (e) => {
         setSelectedTemplate(e.target.value);
@@ -31,23 +46,33 @@ export default function Actions() {
     // If showing new template form, render it instead of the main actions
     if (showNewTemplate) {
         return (
-            <div className="space-y-4">
-                <div className="flex items-center mb-4">
-                    <Button
-                        displayText="← Back"
-                        onClick={handleBackToActions}
-                        variant="secondary"
-                        size="small"
-                        type="button"
-                    />
+            <div 
+                className="bg-theme-secondary border border-theme-primary rounded-lg dashboard-content overflow-y-auto"
+                style={{ maxHeight: `${actionsDefaultHeight}px` }}
+            >
+                <div className="p-4">
+                    <div className="flex items-center mb-4">
+                        <Button
+                            displayText="← Back"
+                            onClick={handleBackToActions}
+                            variant="secondary"
+                            size="small"
+                            type="button"
+                        />
+                    </div>
+                    <div className="space-y-4">
+                        <NewTemplate />
+                    </div>
                 </div>
-                <NewTemplate />
             </div>
         );
     }
 
     return (
-        <div className="bg-theme-secondary border border-theme-primary rounded-lg p-4 dashboard-content">
+        <div 
+            className="bg-theme-secondary border border-theme-primary rounded-lg p-4 dashboard-content"
+            style={{ maxHeight: `${actionsDefaultHeight}px` }}
+        >
             <h2 className="text-lg font-semibold text-theme-primary mb-4">Actions</h2>
 
             <form className="space-y-4">

@@ -1,9 +1,18 @@
 import { createSlice } from '@reduxjs/toolkit'
 
+const getDashboardHeight = () => {
+    if (typeof window !== 'undefined') {
+        // Use the exact same calculation as .dashboard-container class
+        return window.innerHeight - 160;
+    }
+    return 600; // fallback for SSR
+}
+
 const initialState = {
     actionsWidth: 20,
     isResizing: false,
-    documentHeight: 'auto'
+    documentHeight: 'auto',
+    actionsDefaultHeight: getDashboardHeight()
 }
 
 const sizingSlice = createSlice({
@@ -33,6 +42,9 @@ const sizingSlice = createSlice({
         setDocumentHeight: (state, action) => {
             state.documentHeight = action.payload
         },
+        setActionsDefaultHeight: (state, action) => {
+            state.actionsDefaultHeight = action.payload
+        },
         resetSizing: (state) => {
             Object.assign(state, initialState)
         }
@@ -43,6 +55,7 @@ export const {
     setActionsWidth, 
     setIsResizing, 
     setDocumentHeight, 
+    setActionsDefaultHeight,
     resetSizing 
 } = sizingSlice.actions
 
