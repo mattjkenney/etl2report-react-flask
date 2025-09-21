@@ -4,51 +4,55 @@ import Login from './components/Login'
 import Button from './components/Button'
 import Dashboard from './components/Dashboard'
 import { showLogin, logout } from './store/auth/index.js'
+import ButtonDemo from './components/ButtonDemo'
 
 function App() {
-  const dispatch = useDispatch()
-  const { user, isLoggedIn, showLoginForm } = useSelector(state => state.auth.user)
+    const dispatch = useDispatch()
+    const { user, isLoggedIn, showLoginForm } = useSelector(state => state.auth.user)
 
-  const handleShowLogin = () => {
-    dispatch(showLogin(true))
-  }
+    const handleShowLogin = () => {
+        dispatch(showLogin(true))
+    }
 
-  const handleLogout = () => {
-    dispatch(logout())
-  }
+    const handleLogout = () => {
+        dispatch(logout())
+    }
 
-  return (
-    <Layout 
-      isLoggedIn={isLoggedIn}
-      user={user}
-      onLogin={handleShowLogin}
-      onLogout={handleLogout}
-    >
-      {(!isLoggedIn && showLoginForm) ? (
-        <div className="space-y-6">
-          <div className="max-w-md mx-auto">
-            <Login />
-          </div>
-        </div>
-      ) : isLoggedIn ? (
-        <Dashboard />
-      ) : (
-        <div className="space-y-6">
-          <div className="text-center">
-            <p className="text-theme-secondary mb-4">
-              Please log in to access your dashboard.
-            </p>
-            <Button
-              displayText="Get Started"
-              onClick={handleShowLogin}
-              variant="primary"
-              size="medium"
-            />
-          </div>
-        </div>
-      )}
-    </Layout>
-  )
+    return (
+        <Layout
+            isLoggedIn={isLoggedIn}
+            user={user}
+            onLogin={handleShowLogin}
+            onLogout={handleLogout}
+        >
+            {(!isLoggedIn && showLoginForm) ? (
+                <div className="space-y-6">
+                    <div className="max-w-md mx-auto">
+                        <Login />
+                    </div>
+                </div>
+            ) : isLoggedIn ? (
+                <Dashboard />
+            ) : (
+                <div className="space-y-6">
+                    <div className="text-center">
+                        <p className="text-theme-secondary mb-4">
+                            Please log in to access your dashboard.
+                        </p>
+                        <Button
+                            displayText="Get Started"
+                            onClick={handleShowLogin}
+                            variant="primary"
+                            size="medium"
+                        />
+                        {/*Demo area for Button component. Uncomment only during development to see 
+                         the effect of various props on the Button component*/}
+                        {/*<ButtonDemo />*/}
+                    </div>
+                </div>
+            )}
+        </Layout>
+    )
 }
 
 export default App
