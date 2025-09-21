@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { setCurrentPage, setTotalPages, setScale, setLoading, setError } from '../store/dash/pdfViewer';
+import Button from './Button';
 
 // Use local worker file with matching version to avoid CORS and version mismatch issues
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
@@ -78,15 +79,16 @@ export default function View() {
                     <h2 className="text-xl font-semibold text-red-500 mb-2">Error Loading PDF</h2>
                     <p className="text-theme-primary/70 mb-4">{error}</p>
                     <div className="space-y-2">
-                        <button 
+                        <Button 
+                            displayText="Retry Loading PDF"
                             onClick={() => {
                                 dispatch(setError(null));
                                 dispatch(setLoading(true));
                             }}
-                            className="block mx-auto px-4 py-2 bg-theme-primary text-theme-secondary rounded hover:bg-opacity-80"
-                        >
-                            Retry Loading PDF
-                        </button>
+                            variant="primary"
+                            size="medium"
+                            className="block mx-auto"
+                        />
                         <p className="text-xs text-theme-primary/50">
                             PDF.js v{pdfjs.version} | Worker: {pdfjs.GlobalWorkerOptions.workerSrc}
                         </p>
@@ -101,47 +103,47 @@ export default function View() {
             {/* PDF Controls */}
             <div className="flex items-center justify-between p-4 border-b border-theme-primary">
                 <div className="flex items-center space-x-4">
-                    <button
+                    <Button
+                        displayText="Previous"
                         onClick={goToPreviousPage}
                         disabled={currentPage <= 1 || isLoading}
-                        className="px-3 py-1 bg-theme-primary text-theme-secondary rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-opacity-80"
-                    >
-                        Previous
-                    </button>
+                        variant="ghost"
+                        size="small"
+                    />
                     
                     <span className="text-theme-primary">
                         Page {currentPage} of {totalPages}
                     </span>
                     
-                    <button
+                    <Button
+                        displayText="Next"
                         onClick={goToNextPage}
                         disabled={currentPage >= totalPages || isLoading}
-                        className="px-3 py-1 bg-theme-primary text-theme-secondary rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-opacity-80"
-                    >
-                        Next
-                    </button>
+                        variant="ghost"
+                        size="small"
+                    />
                 </div>
 
                 <div className="flex items-center space-x-2">
-                    <button
+                    <Button
+                        displayText="Zoom Out"
                         onClick={zoomOut}
                         disabled={scale <= 0.5 || isLoading}
-                        className="px-3 py-1 bg-theme-primary text-theme-secondary rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-opacity-80"
-                    >
-                        Zoom Out
-                    </button>
+                        variant="ghost"
+                        size="small"
+                    />
                     
                     <span className="text-theme-primary min-w-[60px] text-center">
                         {Math.round(scale * 100)}%
                     </span>
                     
-                    <button
+                    <Button
+                        displayText="Zoom In"
                         onClick={zoomIn}
                         disabled={scale >= 3.0 || isLoading}
-                        className="px-3 py-1 bg-theme-primary text-theme-secondary rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-opacity-80"
-                    >
-                        Zoom In
-                    </button>
+                        variant="ghost"
+                        size="small"
+                    />
                 </div>
             </div>
 

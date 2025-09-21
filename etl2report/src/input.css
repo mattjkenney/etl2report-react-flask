@@ -249,6 +249,15 @@ button:focus:not(:focus-visible) {
   box-shadow: none !important;
 }
 
+/* Missing text color classes for Button component */
+.text-blue-400 {
+  color: var(--color-blue-400);
+}
+
+.hover\:text-blue-400:hover {
+  color: var(--color-blue-400);
+}
+
 /* Dashboard layout classes */
 .dashboard-container {
   height: calc(100vh - 160px);

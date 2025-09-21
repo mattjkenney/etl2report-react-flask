@@ -6,7 +6,7 @@ const ButtonDemo = () => {
   return (
     <div className="p-8 space-y-6 bg-theme-primary">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-theme-primary mb-4">Button Double Border Demo</h2>
+        <h2 className="text-2xl font-bold text-theme-primary mb-4">Button Component Demo</h2>
         <ThemeToggle />
       </div>
       
@@ -43,7 +43,7 @@ const ButtonDemo = () => {
         
         <div>
           <h3 className="text-lg font-semibold text-theme-primary mb-2">Ghost Button</h3>
-          <p className="text-theme-secondary text-sm mb-2">Hover to see white inner border + theme border outer border (same as ThemeToggle)</p>
+          <p className="text-theme-secondary text-sm mb-2">Appears as plain text until hovered - text changes to blue-400 on hover. Use for buttons that should be invisible until interaction.</p>
           <Button 
             displayText="Ghost Button" 
             variant="ghost" 
@@ -61,13 +61,26 @@ const ButtonDemo = () => {
         </div>
         
         <div>
+          <h3 className="text-lg font-semibold text-theme-primary mb-2">Ghost Button Variants by Size</h3>
+          <p className="text-theme-secondary text-sm mb-2">Ghost buttons at different sizes - all appear as plain text until hovered</p>
+          <div className="flex gap-4 items-end">
+            <Button displayText="Small Ghost" variant="ghost" size="small" />
+            <Button displayText="Medium Ghost" variant="ghost" size="medium" />
+            <Button displayText="Large Ghost" variant="ghost" size="large" />
+          </div>
+        </div>
+        
+        <div>
           <h3 className="text-lg font-semibold text-theme-primary mb-2">Loading State</h3>
           <Button displayText="Loading..." variant="primary" loading={true} />
         </div>
         
         <div>
           <h3 className="text-lg font-semibold text-theme-primary mb-2">Disabled State</h3>
-          <Button displayText="Disabled" variant="primary" disabled={true} />
+          <div className="flex gap-4 items-center">
+            <Button displayText="Disabled Primary" variant="primary" disabled={true} />
+            <Button displayText="Disabled Ghost" variant="ghost" disabled={true} />
+          </div>
         </div>
       </div>
     </div>
