@@ -1,6 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import Button from './Button';
+import NewPasswordRequired from './NewPasswordRequired';
+import PasswordInput from './PasswordInput';
 import { 
     updateFormData, 
     setFormErrors, 
@@ -11,11 +13,18 @@ import {
     setGeneralError,
     resetFormData
 } from '../store/auth/index.js';
+import { configureCognito } from '../config/cognito';
 
 const Login = ({ className = '' }) => {
     const dispatch = useDispatch();
     const { formData, formErrors } = useSelector(state => state.auth.login);
-    const { isLoading, isLoggedIn, error } = useSelector(state => state.auth.user);
+    const { isLoading, isLoggedIn, error, requireNewPassword } = useSelector(state => state.auth.user);
+    const [showNewPasswordForm, setShowNewPasswordForm] = useState(false);
+
+    // Initialize Cognito configuration
+    useEffect(() => {
+        configureCognito();
+    }, []);
 
     // Handle user slice state changes
     useEffect(() => {
@@ -31,6 +40,12 @@ const Login = ({ className = '' }) => {
             dispatch(setGeneralError(error));
         }
     }, [error, dispatch]);
+
+    useEffect(() => {
+        if (requireNewPassword) {
+            setShowNewPasswordForm(true);
+        }
+    }, [requireNewPassword]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -62,6 +77,13 @@ const Login = ({ className = '' }) => {
         // Dispatch showSignup action directly
         dispatch(showSignup(true));
     };
+
+    if (showNewPasswordForm) {
+        return <NewPasswordRequired 
+            username={formData.username}
+            onSuccess={() => setShowNewPasswordForm(false)}
+        />;
+    }
 
     return (
         <div className={`bg-theme-secondary p-6 rounded-lg border border-theme-primary shadow-theme-lg ${className}`}>
@@ -108,39 +130,16 @@ const Login = ({ className = '' }) => {
                     )}
                 </div>
 
-                <div className="flex flex-col">
-                    <label
-                        htmlFor="password"
-                        className="block text-sm font-medium text-theme-secondary mb-2 self-start"
-                    >
-                        Password
-                    </label>
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        className={`
-                            w-full px-3 py-2 
-                            bg-theme-primary 
-                            border ${formErrors.password ? 'border-red-500' : 'border-theme-primary'}
-                            rounded-md 
-                            text-theme-primary
-                            placeholder-theme-muted
-                            focus:outline-none 
-                            focus:ring-2 
-                            focus:ring-blue-500 
-                            focus:border-transparent
-                            transition-colors
-                        `}
-                        placeholder="Enter your password"
-                        disabled={isLoading}
-                    />
-                    {formErrors.password && (
-                        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{formErrors.password}</p>
-                    )}
-                </div>
+                <PasswordInput
+                    id="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    placeholder="Enter your password"
+                    disabled={isLoading}
+                    error={formErrors.password}
+                    label="Password"
+                />
 
                 <Button
                     type="submit"
