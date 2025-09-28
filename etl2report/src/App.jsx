@@ -3,7 +3,7 @@ import Layout from './components/Layout'
 import Login from './components/Login'
 import Button from './components/Button'
 import Dashboard from './components/Dashboard'
-import { showLogin, logout } from './store/auth/index.js'
+import { showLogin, logoutUser } from './store/auth/index.js'
 import ButtonDemo from './components/ButtonDemo'
 
 function App() {
@@ -15,7 +15,7 @@ function App() {
     }
 
     const handleLogout = () => {
-        dispatch(logout())
+        dispatch(logoutUser())
     }
 
     return (

@@ -12,7 +12,16 @@ const authReducer = combineReducers({
 export default authReducer
 
 // Re-export actions for convenience
-export { showLogin, showSignup, logout, clearError, loginUser } from './user.js'
+export { 
+    showLogin, 
+    showSignup, 
+    resetState,
+    clearError, 
+    loginUser,
+    logoutUser,
+    loginSuccess,
+    loginFailure 
+} from './user.js'
 export { 
     updateFormData, 
     setFormErrors, 
