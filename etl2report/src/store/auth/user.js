@@ -37,7 +37,6 @@ export const loginUser = createAsyncThunk(
                 await forceSignOut();
             } catch (error) {
                 // No user is signed in, which is what we want
-                console.log('No current user, proceeding with sign in');
             }
             
             // Sign in with AWS Cognito
