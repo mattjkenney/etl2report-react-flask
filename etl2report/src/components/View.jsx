@@ -58,9 +58,6 @@ export default function View() {
         dispatch(setScale(Math.max(scale - 0.25, 0.5)));
     };
 
-    console.log('PDF.js version from react-pdf:', pdfjs.version);
-    console.log('Worker URL:', pdfjs.GlobalWorkerOptions.workerSrc);
-
     if (!pdfUrl) {
         return (
             <div className="flex items-center justify-center h-full bg-theme-secondary border border-theme-primary rounded-lg p-8">

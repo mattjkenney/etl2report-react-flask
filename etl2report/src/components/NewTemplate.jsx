@@ -1,12 +1,14 @@
 import { useSelector, useDispatch } from 'react-redux';
 import { useState, useEffect } from 'react';
 import { setReportFile, updateFormField } from '../store/dash/actions/newTemplate';
-import { setPdfUrl, resetPdfViewer } from '../store/dash/pdfViewer';
+import { setPdfUrl, resetPdfViewer, setLoading } from '../store/dash/pdfViewer';
+import { uploadFile } from '../utils/aws-api';
 import Button from './Button';
 
 export default function NewTemplate() {
     const dispatch = useDispatch();
     const formData = useSelector((state) => state.newTemplate);
+    const pdfViewer = useSelector((state) => state.pdfViewer);
     
     // Keep the actual File object in local state
     const [actualFile, setActualFile] = useState(null);
@@ -23,7 +25,6 @@ export default function NewTemplate() {
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
-        console.log('File selected in NewTemplate:', file ? file.name : 'null', file?.type);
         
         // Clean up previous URL
         if (currentPdfUrl) {
@@ -46,7 +47,6 @@ export default function NewTemplate() {
                 return;
             }
             
-            console.log('Storing file metadata in Redux store:', file.name);
             // Store the actual File object locally
             setActualFile(file);
             
@@ -77,7 +77,7 @@ export default function NewTemplate() {
         dispatch(updateFormField({ name, value }));
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         
         // Basic validation for required field
@@ -86,16 +86,29 @@ export default function NewTemplate() {
             return;
         }
 
-        // Handle form submission logic here with the actual file
-        console.log('Form submitted:', { 
-            ...formData, 
-            actualFile: actualFile // Use the actual File object for processing
-        });
-        alert('Template creation initiated!');
-        
-        // Optionally reset the form after submission
-        // setActualFile(null);
-        // dispatch(resetForm());
+        try {
+            // Set loading state
+            dispatch(setLoading(true));
+
+            // Attempt to upload the file
+            const bucketName = import.meta.env.VITE_AWS_TEXTRACT_SOURCE_BUCKET;
+            if (!bucketName) {
+                throw new Error('S3 bucket name is not configured. Please check your environment variables.');
+            }
+            const response = await uploadFile(actualFile, bucketName);
+
+            // Show success message
+            alert('Template created successfully!');
+            
+            // Optionally reset the form after successful submission
+            // setActualFile(null);
+            // dispatch(resetForm());
+        } catch (error) {
+            console.error('Error creating template:', error);
+            alert('Failed to create template: ' + error.message);
+        } finally {
+            dispatch(setLoading(false));
+        }
     };
 
     const isFormValid = formData.reportFile !== null && actualFile !== null;
@@ -166,12 +179,12 @@ export default function NewTemplate() {
                 </div>
                 <div className="pt-4">
                     <Button
-                        displayText="Create Template"
+                        displayText={pdfViewer.isLoading ? "Creating Template..." : "Create Template"}
                         variant="primary"
                         size="medium"
                         className="w-full"
                         type="submit"
-                        disabled={!isFormValid}
+                        disabled={!isFormValid || pdfViewer.isLoading}
                     />
                 </div>
             </form>
