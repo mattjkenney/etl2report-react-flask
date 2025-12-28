@@ -78,6 +78,23 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Log the request (useful for debugging)
         print(f"Generating presigned URL for user: {user_id or 'BYPASS'}, bucket: {bucket}, key: {key}")
         
+        # Check if the key already exists in the bucket
+        try:
+            s3_client.head_object(Bucket=bucket, Key=key)
+            # If head_object succeeds, the object exists
+            return create_response(409, {'error': f'Object already exists at key: {key}'})
+        except s3_client.exceptions.NoSuchKey:
+            # Object doesn't exist, which is what we want
+            pass
+        except s3_client.exceptions.ClientError as e:
+            # Check if it's a 404 error (object doesn't exist)
+            if e.response['Error']['Code'] == '404':
+                # Object doesn't exist, which is what we want
+                pass
+            else:
+                # Some other error occurred
+                raise
+        
         # Generate presigned URL for PUT operation
         presigned_url = s3_client.generate_presigned_url(
             'put_object',

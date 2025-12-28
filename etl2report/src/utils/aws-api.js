@@ -30,7 +30,7 @@ async function getAuthSession() {
     }
 }
 
-export async function uploadFile(file, bucketName) {
+export async function uploadFile(file, bucketName, key = null, metadata = {}) {
     try {
         // Get the auth session details
         const { token, sub } = await getAuthSession();
@@ -55,16 +55,23 @@ export async function uploadFile(file, bucketName) {
             throw new Error('API endpoint is not configured. Please check your environment variables.');
         }
 
-        // Construct the S3 key
-        const key = `${sub}/${file.name}`;
+        // Ensure key ends with .pdf if provided
+        let finalKey = key || file.name;
+        if (key && !key.toLowerCase().endsWith('.pdf')) {
+            finalKey = `${key}.pdf`;
+        }
+
+        // Use provided key or construct default S3 key
+        const s3Key = `${sub}/${finalKey}`;
 
         // console.log('Requesting pre-signed URL:', {
         //     fileSize: file.size,
         //     fileName: file.name,
         //     contentType: file.type,
-        //     key: key,
+        //     key: s3Key,
         //     bucket: bucketName,
-        //     endpoint: apiEndpoint
+        //     endpoint: apiEndpoint,
+        //     metadata: metadata
         // });
 
         // Step 1: Get pre-signed URL from backend
@@ -76,8 +83,9 @@ export async function uploadFile(file, bucketName) {
             },
             body: JSON.stringify({
                 bucket: bucketName,
-                key: key,
+                key: s3Key,
                 contentType: file.type,
+                metadata: metadata
             })
         });
 
@@ -115,7 +123,7 @@ export async function uploadFile(file, bucketName) {
             success: true,
             message: 'File uploaded successfully',
             bucket: bucketName,
-            key: key,
+            key: s3Key,
             fileName: file.name
         };
     } catch (error) {

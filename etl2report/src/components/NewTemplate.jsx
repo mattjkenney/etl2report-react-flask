@@ -61,6 +61,9 @@ export default function NewTemplate() {
             // Dispatch only serializable metadata
             dispatch(setReportFile(fileMetadata));
             
+            // Set template name to filename without extension
+            dispatch(updateFormField({ name: 'templateName', value: file.name}))     
+
             // Create object URL for PDF viewing and store in Redux
             const pdfUrl = URL.createObjectURL(file);
             setCurrentPdfUrl(pdfUrl);
@@ -95,7 +98,7 @@ export default function NewTemplate() {
             if (!bucketName) {
                 throw new Error('S3 bucket name is not configured. Please check your environment variables.');
             }
-            const response = await uploadFile(actualFile, bucketName);
+            const response = await uploadFile(actualFile, bucketName, formData.templateName, { description: formData.description });
 
             // Show success message
             alert('Template created successfully!');
@@ -153,7 +156,7 @@ export default function NewTemplate() {
                         id="template-name"
                         name="templateName"
                         type="text"
-                        value={formData.templateName}
+                        value={formData.templateName }
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-theme-primary rounded-md bg-theme-secondary text-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent"
                         placeholder="Enter template name..."
