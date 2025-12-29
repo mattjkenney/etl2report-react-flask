@@ -2,6 +2,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useState, useEffect } from 'react';
 import { setReportFile, updateFormField } from '../store/dash/actions/newTemplate';
 import { setPdfUrl, resetPdfViewer, setLoading } from '../store/dash/pdfViewer';
+import { addMessage } from '../store/messages';
 import { uploadFile } from '../utils/aws-api';
 import Button from './Button';
 
@@ -85,7 +86,11 @@ export default function NewTemplate() {
         
         // Basic validation for required field
         if (!formData.reportFile || !actualFile) {
-            alert('Please select a report file');
+            dispatch(addMessage({
+                id: Date.now(),
+                message: 'Please select a report file.',
+                isError: true
+            }));
             return;
         }
 
@@ -101,14 +106,22 @@ export default function NewTemplate() {
             const response = await uploadFile(actualFile, bucketName, formData.templateName, { description: formData.description });
 
             // Show success message
-            alert('Template created successfully!');
+            dispatch(addMessage({
+                id: Date.now(),
+                message: 'Template created successfully!',
+                isError: false
+            }));
             
             // Optionally reset the form after successful submission
             // setActualFile(null);
             // dispatch(resetForm());
         } catch (error) {
             console.error('Error creating template:', error);
-            alert('Failed to create template: ' + error.message);
+            dispatch(addMessage({
+                id: Date.now(),
+                message: 'Failed to create template!',
+                isError: true
+            }));
         } finally {
             dispatch(setLoading(false));
         }

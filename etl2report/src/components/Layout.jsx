@@ -1,6 +1,7 @@
 import '../output.css'
 import ThemeToggle from './ThemeToggle'
 import Button from './Button'
+import MessageList from './MessageList'
 
 export default function Layout({ children, isLoggedIn, user, onLogin, onLogout }) {
     const handleAuthClick = () => {
@@ -30,6 +31,7 @@ export default function Layout({ children, isLoggedIn, user, onLogin, onLogout }
                     />
                 </div>
             </header>
+            <MessageList />
             <main className="flex-grow p-4 text-theme-primary">{children}</main>
             <footer className="bg-theme-secondary text-theme-secondary text-left p-4 border-t border-theme-primary">
                 &copy; 2024 InstaReport

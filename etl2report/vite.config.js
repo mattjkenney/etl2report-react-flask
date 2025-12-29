@@ -48,6 +48,13 @@ export default defineConfig({
         fs: {
             allow: ['..'],
         },
+        watch: {
+            usePolling: true, // Helpful for some file systems (WSL, Docker)
+            interval: 100, // Polling interval in ms
+        },
+        hmr: {
+            overlay: true, // Show errors as overlay
+        },
     },
     build: {
         rollupOptions: {
