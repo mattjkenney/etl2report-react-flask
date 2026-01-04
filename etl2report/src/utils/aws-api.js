@@ -30,7 +30,7 @@ async function getAuthSession() {
     }
 }
 
-export async function uploadFile(file, bucketName, key = null, metadata = {}) {
+export async function uploadFile(file, bucketName, key = null, description = '') {
     try {
         // Get the auth session details
         const { token, sub } = await getAuthSession();
@@ -62,7 +62,7 @@ export async function uploadFile(file, bucketName, key = null, metadata = {}) {
         }
 
         // Use provided key or construct default S3 key
-        const s3Key = `${sub}/${finalKey}`;
+        const s3Key = `${sub}/report-template/${finalKey}`;
 
         // console.log('Requesting pre-signed URL:', {
         //     fileSize: file.size,
@@ -85,7 +85,7 @@ export async function uploadFile(file, bucketName, key = null, metadata = {}) {
                 bucket: bucketName,
                 key: s3Key,
                 contentType: file.type,
-                metadata: metadata
+                description: description
             })
         });
 
@@ -128,6 +128,73 @@ export async function uploadFile(file, bucketName, key = null, metadata = {}) {
         };
     } catch (error) {
         console.error('Error uploading file:', error);
+        throw error;
+    }
+}
+
+export async function startTextractAnalysis(bucket, key, outputBucket, outputKeyPrefix = null) {
+    try {
+        // Get the auth session details
+        const { token, sub } = await getAuthSession();
+        
+        // Validate required parameters
+        if (!token) {
+            throw new Error('Authentication token is missing');
+        }
+        if (!bucket) {
+            throw new Error('Bucket is required');
+        }
+        if (!key) {
+            throw new Error('Key is required');
+        }
+        if (!outputBucket) {
+            throw new Error('Output bucket is required');
+        }
+        
+        // Set default outputKeyPrefix if not provided
+        const finalOutputKeyPrefix = outputKeyPrefix || `${sub}/textract-output`;
+        
+        // Verify we have an API endpoint
+        const apiEndpoint = import.meta.env.VITE_AWS_TEXTRACT_START_DOCUMENT_ANALYSIS_API_ENDPOINT;
+        if (!apiEndpoint) {
+            throw new Error('Textract API endpoint is not configured. Please check your environment variables.');
+        }
+
+        // Call the API Gateway endpoint
+        const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                bucket: bucket,
+                key: key,
+                outputBucket: outputBucket,
+                outputKeyPrefix: finalOutputKeyPrefix
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to start Textract analysis: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (!data.jobId) {
+            throw new Error('No job ID returned from Textract service');
+        }
+
+        // Return success data
+        return {
+            success: true,
+            jobId: data.jobId,
+            status: data.status,
+            outputLocation: data.outputLocation
+        };
+    } catch (error) {
+        console.error('Error starting Textract analysis:', error);
         throw error;
     }
 }

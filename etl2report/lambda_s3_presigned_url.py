@@ -2,7 +2,7 @@ import json
 import boto3
 import os
 from typing import Any
-from lambda_utils import create_response, extract_user_from_token
+from lambda_utils import create_response, get_client_with_assumed_role
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -19,8 +19,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     - presignedUrl: The S3 presigned URL for PUT operation
     """
     
-    # Initialize S3 client
-    s3_client = boto3.client('s3')
+    # Get role ARN from environment variable
+    role_arn = os.environ.get('S3_TENANT_ROLE_ARN')
     
     # Default expiration time (in seconds) - can be overridden by environment variable
     expiration = int(os.environ.get('PRESIGNED_URL_EXPIRATION', '3600'))
@@ -36,6 +36,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         bucket = body.get('bucket')
         key = body.get('key')
         content_type = body.get('contentType')
+        description = body.get('description', '')
         
         # Validate required parameters
         if not bucket:
@@ -51,32 +52,26 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if content_type != 'application/pdf':
             return create_response(400, {'error': f'Invalid file type: {content_type}. Only PDF files (application/pdf) are allowed'})
         
-        # Extract authorization header (always required)
-        authorization = event.get('headers', {}).get('Authorization', '') or event.get('headers', {}).get('authorization', '')
+        # Extract user ID from Cognito authorizer claims
+        claims = event.get('requestContext', {}).get('authorizer', {}).get('claims', {})
+        user_id = claims.get('sub')
         
-        if not authorization:
-            return create_response(401, {'error': 'Missing Authorization header'})
+        if not user_id:
+            return create_response(401, {'error': 'Invalid or missing user ID from authorization'})
         
-        # Check if authorization bypass is enabled (for testing purposes only)
-        bypass_auth = os.environ.get('BYPASS_AUTH_CHECK', 'false').lower() in ('true', '1', 'yes')
+        # Validate that the key path is prefixed with user_id for multi-tenant security
+        if not key.startswith(f"{user_id}/"):
+            return create_response(403, {'error': f'Access denied: Key must be prefixed with user ID ({user_id}/)'})
         
-        if bypass_auth:
-            # Skip token validation and user_id checks - for testing only
-            print("WARNING: Authorization validation bypassed (BYPASS_AUTH_CHECK is enabled)")
-            user_id = None
-        else:
-            # Validate authorization token (required for multi-tenant security)
-            user_id = extract_user_from_token(authorization)
-            
-            if not user_id:
-                return create_response(401, {'error': 'Invalid or expired authorization token'})
-            
-            # Validate that the key path is prefixed with user_id for multi-tenant security
-            if not key.startswith(f"{user_id}/"):
-                return create_response(403, {'error': f'Access denied: Key must be prefixed with user ID ({user_id}/)'})
+        # Validate that role ARN is configured
+        if not role_arn:
+            return create_response(500, {'error': 'Server configuration error: S3_TENANT_ROLE_ARN not configured'})
+        
+        # Create S3 client with assumed role for multi-tenant isolation
+        s3_client = get_client_with_assumed_role('s3', role_arn, user_id)
         
         # Log the request (useful for debugging)
-        print(f"Generating presigned URL for user: {user_id or 'BYPASS'}, bucket: {bucket}, key: {key}")
+        print(f"Generating presigned URL for user: {user_id}, bucket: {bucket}, key: {key}")
         
         # Check if the key already exists in the bucket
         try:
@@ -96,14 +91,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 raise
         
         # Generate presigned URL for PUT operation
+        params = {
+            'Bucket': bucket,
+            'Key': key,
+            'ContentType': content_type,
+        }
+        
+        # Add metadata if description is provided
+        if description:
+            params['Metadata'] = {'description': description}
+        
         presigned_url = s3_client.generate_presigned_url(
             'put_object',
-            Params={
-                'Bucket': bucket,
-                'Key': key,
-                'ContentType': content_type,
-            },
-            ExpiresIn= expiration,
+            Params=params,
+            ExpiresIn=expiration,
             HttpMethod='PUT'
         )
         

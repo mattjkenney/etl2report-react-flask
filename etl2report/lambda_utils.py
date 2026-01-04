@@ -8,6 +8,7 @@ including JWT token extraction and standardized error response creation.
 import json
 import base64
 import os
+import boto3
 from datetime import datetime, timezone
 from typing import Any
 
@@ -97,3 +98,63 @@ def extract_user_from_token(authorization: str) -> str | None:
     except Exception as e:
         print(f"Error extracting user from token: {str(e)}")
         return None
+
+
+def get_client_with_assumed_role(
+    service_name: str,
+    role_arn: str,
+    tenant_id: str,
+    role_session_name: str | None = None
+) -> Any:
+    """
+    Create a boto3 client with credentials from an assumed IAM role.
+    
+    This function assumes an IAM role and tags the session with a tenant ID,
+    enabling multi-tenant resource isolation through IAM policies and session tags.
+    
+    Args:
+        service_name: AWS service name (e.g., 's3', 'textract', 'dynamodb')
+        role_arn: ARN of the IAM role to assume (e.g., 'arn:aws:iam::123456789012:role/S3TenantRole')
+        tenant_id: Tenant identifier to tag the session with
+        role_session_name: Name for the role session (default: generated from tenant_id)
+        
+    Returns:
+        boto3 client for the specified service with assumed role credentials
+        
+    Raises:
+        Exception: If role assumption fails or credentials are invalid
+        
+    Example:
+        >>> s3_client = get_client_with_assumed_role('s3', 'arn:aws:iam::123456789012:role/S3TenantRole', 'user-123')
+        >>> s3_client.list_buckets()
+    """
+    # Initialize STS client
+    sts = boto3.client('sts')
+    
+    # Generate session name from tenant_id if not provided
+    if not role_session_name:
+        role_session_name = tenant_id
+    
+    # Log the role assumption attempt for debugging
+    print(f"Attempting to assume role: {role_arn} with session name: {role_session_name} and TenantID tag: {tenant_id}")
+    
+    # Assume the role and tag the session with the tenant_id
+    assumed_role = sts.assume_role(
+        RoleArn=role_arn,
+        RoleSessionName=role_session_name,
+        Tags=[{'Key': 'TenantID', 'Value': tenant_id}]
+    )
+    
+    # Extract temporary credentials
+    creds = assumed_role['Credentials']
+    
+    # Create and return a client with the temporary credentials
+    client = boto3.client(
+        service_name,
+        aws_access_key_id=creds['AccessKeyId'],
+        aws_secret_access_key=creds['SecretAccessKey'],
+        aws_session_token=creds['SessionToken']
+    )
+    
+    print(f"Created {service_name} client with assumed role for tenant: {tenant_id}")
+    return client

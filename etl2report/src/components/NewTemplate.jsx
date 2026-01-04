@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { setReportFile, updateFormField } from '../store/dash/actions/newTemplate';
 import { setPdfUrl, resetPdfViewer, setLoading } from '../store/dash/pdfViewer';
 import { addMessage } from '../store/messages';
-import { uploadFile } from '../utils/aws-api';
+import { uploadFile, startTextractAnalysis } from '../utils/aws-api';
 import Button from './Button';
 
 export default function NewTemplate() {
@@ -99,16 +99,25 @@ export default function NewTemplate() {
             dispatch(setLoading(true));
 
             // Attempt to upload the file
-            const bucketName = import.meta.env.VITE_AWS_TEXTRACT_SOURCE_BUCKET;
+            const bucketName = import.meta.env.VITE_AWS_S3_BUCKET;
             if (!bucketName) {
                 throw new Error('S3 bucket name is not configured. Please check your environment variables.');
             }
-            const response = await uploadFile(actualFile, bucketName, formData.templateName, { description: formData.description });
+            const uploadResponse = await uploadFile(actualFile, bucketName, formData.templateName, formData.description);
+
+            // Start Textract analysis on the uploaded file
+            const outputBucket = import.meta.env.VITE_AWS_S3_TEXTRACT_OUTPUT_BUCKET || bucketName;
+            
+            const textractResponse = await startTextractAnalysis(
+                uploadResponse.bucket,
+                uploadResponse.key,
+                outputBucket
+            );
 
             // Show success message
             dispatch(addMessage({
                 id: Date.now(),
-                message: 'Template created successfully!',
+                message: `Template created successfully!`,
                 isError: false
             }));
             
@@ -117,9 +126,27 @@ export default function NewTemplate() {
             // dispatch(resetForm());
         } catch (error) {
             console.error('Error creating template:', error);
+
+            // Determine appropriate error message based on error type
+            let errorMessage = 'Failed to create template!';
+            
+            if (error.message && error.message.includes('409')) {
+                errorMessage = 'Template names must be unique to the user. Please change the template name.';
+            } else if (error.message && error.message.includes('Object already exists')) {
+                errorMessage = 'Template names must be unique to the user. Please change the template name.';
+            } else if (error.message && error.message.includes('Invalid file type')) {
+                errorMessage = 'Invalid file type. Only PDF files are allowed.';
+            } else if (error.message && error.message.includes('Authentication token')) {
+                errorMessage = 'Authentication failed. Please log in again.';
+            } else if (error.message && error.message.includes('API endpoint')) {
+                errorMessage = 'Configuration error. Please contact support.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            
             dispatch(addMessage({
                 id: Date.now(),
-                message: 'Failed to create template!',
+                message: errorMessage,
                 isError: true
             }));
         } finally {
