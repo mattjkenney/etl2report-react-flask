@@ -2,7 +2,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useState, useEffect } from 'react';
 import { setReportFile, updateFormField } from '../store/dash/actions/newTemplate';
 import { setPdfUrl, resetPdfViewer, setLoading } from '../store/dash/pdfViewer';
-import { uploadFile } from '../utils/aws-api';
+import { addMessage } from '../store/messages';
+import { uploadFile, startTextractAnalysis } from '../utils/aws-api';
 import Button from './Button';
 
 export default function NewTemplate() {
@@ -61,6 +62,9 @@ export default function NewTemplate() {
             // Dispatch only serializable metadata
             dispatch(setReportFile(fileMetadata));
             
+            // Set template name to filename without extension
+            dispatch(updateFormField({ name: 'templateName', value: file.name}))     
+
             // Create object URL for PDF viewing and store in Redux
             const pdfUrl = URL.createObjectURL(file);
             setCurrentPdfUrl(pdfUrl);
@@ -82,7 +86,11 @@ export default function NewTemplate() {
         
         // Basic validation for required field
         if (!formData.reportFile || !actualFile) {
-            alert('Please select a report file');
+            dispatch(addMessage({
+                id: Date.now(),
+                message: 'Please select a report file.',
+                isError: true
+            }));
             return;
         }
 
@@ -91,21 +99,56 @@ export default function NewTemplate() {
             dispatch(setLoading(true));
 
             // Attempt to upload the file
-            const bucketName = import.meta.env.VITE_AWS_TEXTRACT_SOURCE_BUCKET;
+            const bucketName = import.meta.env.VITE_AWS_S3_BUCKET;
             if (!bucketName) {
                 throw new Error('S3 bucket name is not configured. Please check your environment variables.');
             }
-            const response = await uploadFile(actualFile, bucketName);
+            const uploadResponse = await uploadFile(actualFile, bucketName, formData.templateName, formData.description);
+
+            // Start Textract analysis on the uploaded file
+            const outputBucket = bucketName; // Use the same bucket for Textract output
+            
+            const textractResponse = await startTextractAnalysis(
+                uploadResponse.bucket,
+                uploadResponse.key,
+                outputBucket
+            );
 
             // Show success message
-            alert('Template created successfully!');
+            dispatch(addMessage({
+                id: Date.now(),
+                message: `Template created successfully!`,
+                isError: false
+            }));
             
             // Optionally reset the form after successful submission
             // setActualFile(null);
             // dispatch(resetForm());
         } catch (error) {
             console.error('Error creating template:', error);
-            alert('Failed to create template: ' + error.message);
+
+            // Determine appropriate error message based on error type
+            let errorMessage = 'Failed to create template!';
+            
+            if (error.message && error.message.includes('409')) {
+                errorMessage = 'Template names must be unique to the user. Please change the template name.';
+            } else if (error.message && error.message.includes('Object already exists')) {
+                errorMessage = 'Template names must be unique to the user. Please change the template name.';
+            } else if (error.message && error.message.includes('Invalid file type')) {
+                errorMessage = 'Invalid file type. Only PDF files are allowed.';
+            } else if (error.message && error.message.includes('Authentication token')) {
+                errorMessage = 'Authentication failed. Please log in again.';
+            } else if (error.message && error.message.includes('API endpoint')) {
+                errorMessage = 'Configuration error. Please contact support.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            
+            dispatch(addMessage({
+                id: Date.now(),
+                message: errorMessage,
+                isError: true
+            }));
         } finally {
             dispatch(setLoading(false));
         }
@@ -153,7 +196,7 @@ export default function NewTemplate() {
                         id="template-name"
                         name="templateName"
                         type="text"
-                        value={formData.templateName}
+                        value={formData.templateName }
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-theme-primary rounded-md bg-theme-secondary text-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent"
                         placeholder="Enter template name..."

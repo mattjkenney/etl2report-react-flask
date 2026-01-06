@@ -1,0 +1,21 @@
+{
+  "body": "{\"bucket\":\"etl2report-multi-tenant-bucket\",\"key\":\"1498f4a8-f071-700a-fc7e-7e054924543d/test-folder/test-file/test-file.pdf\",\"contentType\":\"application/pdf\",\"description\":\"Test PDF document for presigned URL generation\"}",
+  "headers": {
+    "Authorization": "Bearer test-token-for-bypass-mode",
+    "Content-Type": "application/json"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "abc123",
+    "requestId": "test-request-id",
+    "authorizer": {
+      "claims": {
+        "sub": "1498f4a8-f071-700a-fc7e-7e054924543d",
+        "email": "test@example.com",
+        "cognito:username": "matt"
+      }
+    }
+  },
+  "httpMethod": "POST",
+  "path": "/presigned-url"
+}

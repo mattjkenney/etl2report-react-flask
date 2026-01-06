@@ -9,6 +9,8 @@ const Button = ({
     loading = false,
     className = '',
     type = 'button',
+    children,
+    prefix,
     ...props
 }) => {
     const handleClick = (e) => {
@@ -27,7 +29,9 @@ const Button = ({
         primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.blue.400)] hover:shadow-md',
         danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.red.400)] hover:shadow-md',
         secondary: 'bg-theme-secondary hover:bg-theme-tertiary text-theme-primary border border-theme-primary focus:ring-blue-500 hover:border-white hover:shadow-[0_0_0_3px_theme(colors.blue.400)] hover:shadow-md',
-        ghost: 'text-theme-primary hover:text-blue-400'
+        ghost: 'text-theme-primary hover:text-blue-400',
+        'error-message': 'bg-red-500 hover:bg-red-600 text-white focus:ring-red-500 flex-grow text-left',
+        'success-message': 'bg-success hover:bg-success-hover text-white focus:ring-blue-500 flex-grow text-left'
     };
 
     const sizeClasses = {
@@ -67,10 +71,16 @@ const Button = ({
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
+                    {prefix && <span className="mr-2">{prefix}</span>}
                     {displayText}
+                    {children}
                 </div>
             ) : (
-                displayText
+                <>
+                    {prefix && <span className="mr-2">{prefix}</span>}
+                    {displayText}
+                    {children}
+                </>
             )}
         </button>
     );
