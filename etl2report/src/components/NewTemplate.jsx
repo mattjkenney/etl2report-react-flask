@@ -106,7 +106,7 @@ export default function NewTemplate() {
             const uploadResponse = await uploadFile(actualFile, bucketName, formData.templateName, formData.description);
 
             // Start Textract analysis on the uploaded file
-            const outputBucket = import.meta.env.VITE_AWS_S3_TEXTRACT_OUTPUT_BUCKET || bucketName;
+            const outputBucket = bucketName; // Use the same bucket for Textract output
             
             const textractResponse = await startTextractAnalysis(
                 uploadResponse.bucket,

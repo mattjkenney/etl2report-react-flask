@@ -57,12 +57,16 @@ export async function uploadFile(file, bucketName, key = null, description = '')
 
         // Ensure key ends with .pdf if provided
         let finalKey = key || file.name;
+        let S3Key_prefix = '';
         if (key && !key.toLowerCase().endsWith('.pdf')) {
             finalKey = `${key}.pdf`;
+            S3Key_prefix = key;
+        } else {
+            S3Key_prefix = key.slice(0, -4); // Remove .pdf
         }
 
         // Use provided key or construct default S3 key
-        const s3Key = `${sub}/report-template/${finalKey}`;
+        const s3Key = `${sub}/templates/${S3Key_prefix}/${finalKey}`;
 
         // console.log('Requesting pre-signed URL:', {
         //     fileSize: file.size,
@@ -152,7 +156,14 @@ export async function startTextractAnalysis(bucket, key, outputBucket, outputKey
         }
         
         // Set default outputKeyPrefix if not provided
-        const finalOutputKeyPrefix = outputKeyPrefix || `${sub}/textract-output`;
+        // Extract template name from key (format: user_id/template_name/template_name.pdf)
+        let finalOutputKeyPrefix = outputKeyPrefix;
+        if (!finalOutputKeyPrefix) {
+            const keyParts = key.split('/');
+            // Store textract output under the template folder: user_id/template_name/textract-output
+            const templateName = keyParts[keyParts.length - 1].slice(0, -4); // Remove .pdf
+            finalOutputKeyPrefix = `${sub}/templates/${templateName}/textract-output`;
+        }
         
         // Verify we have an API endpoint
         const apiEndpoint = import.meta.env.VITE_AWS_TEXTRACT_START_DOCUMENT_ANALYSIS_API_ENDPOINT;
