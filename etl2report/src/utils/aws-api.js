@@ -368,3 +368,63 @@ export async function pollTextractResults(jobId, pollInterval = 5000, maxAttempt
         throw error;
     }
 }
+
+/**
+ * List all sub-folders in an S3 bucket under a specified parent folder.
+ * 
+ * @param {string} bucket - The S3 bucket name
+ * @param {string} parentFolder - The parent folder path (optional, defaults to user's root)
+ * @returns {Promise<Object>} Object containing array of folder names
+ */
+export async function listS3Folders(bucket, parentFolder = '') {
+    try {
+        // Get the auth session details
+        const { token } = await getAuthSession();
+        
+        // Validate required parameters
+        if (!token) {
+            throw new Error('Authentication token is missing');
+        }
+        if (!bucket) {
+            throw new Error('Bucket name is required');
+        }
+        
+        // Verify we have an API endpoint
+        const apiEndpoint = import.meta.env.VITE_AWS_S3_LIST_FOLDERS_API_ENDPOINT;
+        if (!apiEndpoint) {
+            throw new Error('S3 List Folders API endpoint is not configured. Please check your environment variables.');
+        }
+
+        // Call the API Gateway endpoint
+        const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                bucket: bucket,
+                parent_folder: parentFolder
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to list S3 folders: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        // Return success data
+        return {
+            success: true,
+            folders: data.folders || [],
+            bucket: data.bucket,
+            parentFolder: data.parent_folder,
+            prefix: data.prefix
+        };
+    } catch (error) {
+        console.error('Error listing S3 folders:', error);
+        throw error;
+    }
+}

@@ -6,7 +6,9 @@ const initialState = {
     totalPages: 0,          // Total number of pages in the PDF
     scale: 1.0,            // Zoom level
     isLoading: false,       // Loading state
-    error: null            // Error message if any
+    error: null,           // Error message if any
+    textractBlocks: null,  // Textract analysis results (blocks with bounding boxes)
+    showBoundingBoxes: true // Toggle to show/hide bounding boxes
 }
 
 const pdfViewerSlice = createSlice({
@@ -37,6 +39,12 @@ const pdfViewerSlice = createSlice({
         setError: (state, action) => {
             state.error = action.payload
         },
+        setTextractBlocks: (state, action) => {
+            state.textractBlocks = action.payload
+        },
+        setShowBoundingBoxes: (state, action) => {
+            state.showBoundingBoxes = action.payload
+        },
         resetPdfViewer: (state) => {
             Object.assign(state, initialState)
         }
@@ -50,6 +58,8 @@ export const {
     setScale,
     setLoading,
     setError,
+    setTextractBlocks,
+    setShowBoundingBoxes,
     resetPdfViewer
 } = pdfViewerSlice.actions
 

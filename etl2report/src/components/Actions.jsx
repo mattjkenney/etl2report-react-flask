@@ -3,14 +3,24 @@ import { useDispatch, useSelector } from 'react-redux';
 import { setReportFile } from '../store/dash/actions/newTemplate';
 import { resetPdfViewer } from '../store/dash/pdfViewer';
 import { setActionsDefaultHeight } from '../store/dash/sizing';
+import { fetchTemplates } from '../store/dash/templates';
 import Button from './Button';
 import NewTemplate from './NewTemplate';
 
 export default function Actions() {
     const dispatch = useDispatch();
     const { actionsDefaultHeight } = useSelector(state => state.sizing);
+    const { templates, loading, error } = useSelector(state => state.templates);
     const [selectedTemplate, setSelectedTemplate] = useState('');
     const [showNewTemplate, setShowNewTemplate] = useState(false);
+
+    // Fetch templates on component mount
+    useEffect(() => {
+        const bucket = import.meta.env.VITE_AWS_S3_BUCKET;
+        if (bucket) {
+            dispatch(fetchTemplates(bucket, 'templates'));
+        }
+    }, [dispatch]);
 
     // Update default height based on window size - matches dashboard-container height
     useEffect(() => {
@@ -89,11 +99,16 @@ export default function Actions() {
                         value={selectedTemplate}
                         onChange={handleTemplateChange}
                         className="w-full px-3 py-2 border border-theme-primary rounded-md bg-theme-secondary text-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent mb-4"
+                        disabled={loading}
                     >
-                        <option value="">Choose a template...</option>
-                        <option value="template1">Template 1</option>
-                        <option value="template2">Template 2</option>
-                        <option value="template3">Template 3</option>
+                        <option value="">
+                            {loading ? 'Loading templates...' : error ? 'Error loading templates' : 'Choose a template...'}
+                        </option>
+                        {templates.map((template) => (
+                            <option key={template} value={template}>
+                                {template}
+                            </option>
+                        ))}
                     </select>
                 </div>
 

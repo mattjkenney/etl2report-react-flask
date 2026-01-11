@@ -1,7 +1,7 @@
 import { useSelector, useDispatch } from 'react-redux';
 import { useState, useEffect } from 'react';
 import { setReportFile, updateFormField } from '../store/dash/actions/newTemplate';
-import { setPdfUrl, resetPdfViewer, setLoading } from '../store/dash/pdfViewer';
+import { setPdfUrl, resetPdfViewer, setLoading, setTextractBlocks } from '../store/dash/pdfViewer';
 import { addMessage } from '../store/messages';
 import { uploadFile, startTextractAnalysis, pollTextractResults } from '../utils/aws-api';
 import Button from './Button';
@@ -130,6 +130,9 @@ export default function NewTemplate() {
                     console.log('Textract progress:', progress);
                 }
             );
+
+            // Store Textract blocks in Redux for bounding box rendering
+            dispatch(setTextractBlocks(textractResults.blocks));
 
             // Show success message with results
             dispatch(addMessage({

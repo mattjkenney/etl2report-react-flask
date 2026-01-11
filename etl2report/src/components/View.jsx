@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { setCurrentPage, setTotalPages, setScale, setLoading, setError } from '../store/dash/pdfViewer';
+import { setCurrentPage, setTotalPages, setScale, setLoading, setError, setShowBoundingBoxes } from '../store/dash/pdfViewer';
 import Button from './Button';
+import BoundingBoxOverlay from './BoundingBoxOverlay';
 
 // Use local worker file with matching version to avoid CORS and version mismatch issues
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
@@ -14,9 +15,11 @@ import 'react-pdf/dist/Page/TextLayer.css';
 export default function View() {
     const dispatch = useDispatch();
     const pdfViewer = useSelector((state) => state.pdfViewer);
-    const { pdfUrl, currentPage, totalPages, scale, isLoading, error } = pdfViewer;
+    const { pdfUrl, currentPage, totalPages, scale, isLoading, error, textractBlocks, showBoundingBoxes } = pdfViewer;
     
     const [numPages, setNumPages] = useState(null);
+    const [pageDimensions, setPageDimensions] = useState({ width: 0, height: 0 });
+    const pageRef = useRef(null);
 
     const onDocumentLoadSuccess = ({ numPages }) => {
         console.log('PDF loaded successfully:', numPages, 'pages');
@@ -36,6 +39,15 @@ export default function View() {
         console.log('Starting to load PDF:', pdfUrl);
         dispatch(setLoading(true));
         dispatch(setError(null));
+    };
+
+    const onPageLoadSuccess = (page) => {
+        const { width, height } = page;
+        setPageDimensions({ width, height });
+    };
+
+    const toggleBoundingBoxes = () => {
+        dispatch(setShowBoundingBoxes(!showBoundingBoxes));
     };
 
     const goToPreviousPage = () => {
@@ -122,6 +134,15 @@ export default function View() {
                 </div>
 
                 <div className="flex items-center space-x-2">
+                    {textractBlocks && (
+                        <Button
+                            displayText={showBoundingBoxes ? "Hide Boxes" : "Show Boxes"}
+                            onClick={toggleBoundingBoxes}
+                            variant="ghost"
+                            size="small"
+                        />
+                    )}
+                    
                     <Button
                         displayText="Zoom Out"
                         onClick={zoomOut}
@@ -164,23 +185,37 @@ export default function View() {
                         }
                     >
                         {!isLoading && numPages && (
-                            <Page
-                                pageNumber={currentPage}
-                                scale={scale}
-                                renderTextLayer={true}
-                                renderAnnotationLayer={true}
-                                className="border border-gray-300 shadow-lg"
-                                loading={
-                                    <div className="flex items-center justify-center p-8">
-                                        <div className="text-theme-primary">Rendering page...</div>
-                                    </div>
-                                }
-                                error={
-                                    <div className="flex items-center justify-center p-8">
-                                        <div className="text-red-500">Failed to render page</div>
-                                    </div>
-                                }
-                            />
+                            <div style={{ position: 'relative', display: 'inline-block' }}>
+                                <Page
+                                    ref={pageRef}
+                                    pageNumber={currentPage}
+                                    scale={scale}
+                                    renderTextLayer={true}
+                                    renderAnnotationLayer={true}
+                                    className="border border-gray-300 shadow-lg"
+                                    onLoadSuccess={onPageLoadSuccess}
+                                    loading={
+                                        <div className="flex items-center justify-center p-8">
+                                            <div className="text-theme-primary">Rendering page...</div>
+                                        </div>
+                                    }
+                                    error={
+                                        <div className="flex items-center justify-center p-8">
+                                            <div className="text-red-500">Failed to render page</div>
+                                        </div>
+                                    }
+                                />
+                                {/* Render bounding box overlay */}
+                                {textractBlocks && pageDimensions.width > 0 && (
+                                    <BoundingBoxOverlay
+                                        blocks={textractBlocks}
+                                        pageNumber={currentPage}
+                                        pageWidth={pageDimensions.width}
+                                        pageHeight={pageDimensions.height}
+                                        show={showBoundingBoxes}
+                                    />
+                                )}
+                            </div>
                         )}
                     </Document>
                 </div>
