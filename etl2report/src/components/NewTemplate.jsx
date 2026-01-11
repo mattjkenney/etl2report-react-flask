@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { setReportFile, updateFormField } from '../store/dash/actions/newTemplate';
 import { setPdfUrl, resetPdfViewer, setLoading } from '../store/dash/pdfViewer';
 import { addMessage } from '../store/messages';
-import { uploadFile, startTextractAnalysis } from '../utils/aws-api';
+import { uploadFile, startTextractAnalysis, pollTextractResults } from '../utils/aws-api';
 import Button from './Button';
 
 export default function NewTemplate() {
@@ -114,10 +114,27 @@ export default function NewTemplate() {
                 outputBucket
             );
 
-            // Show success message
             dispatch(addMessage({
                 id: Date.now(),
-                message: `Template created successfully!`,
+                message: `Textract analysis started (Job ID: ${textractResponse.jobId}). Processing document...`,
+                isError: false
+            }));
+
+            // Poll for Textract results
+            const textractResults = await pollTextractResults(
+                textractResponse.jobId,
+                5000, // Poll every 5 seconds
+                60,   // Max 60 attempts (5 minutes)
+                (progress) => {
+                    // Update user on progress
+                    console.log('Textract progress:', progress);
+                }
+            );
+
+            // Show success message with results
+            dispatch(addMessage({
+                id: Date.now(),
+                message: `Template created successfully! Textract analysis complete. Extracted ${textractResults.totalBlocks} blocks from document.`,
                 isError: false
             }));
             

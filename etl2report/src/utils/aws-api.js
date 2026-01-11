@@ -209,3 +209,162 @@ export async function startTextractAnalysis(bucket, key, outputBucket, outputKey
         throw error;
     }
 }
+
+export async function getTextractResults(jobId, nextToken = null) {
+    try {
+        // Get the auth session details
+        const { token } = await getAuthSession();
+        
+        // Validate required parameters
+        if (!token) {
+            throw new Error('Authentication token is missing');
+        }
+        if (!jobId) {
+            throw new Error('Job ID is required');
+        }
+        
+        // Verify we have an API endpoint
+        const apiEndpoint = import.meta.env.VITE_AWS_TEXTRACT_GET_DOCUMENT_ANALYSIS_API_ENDPOINT;
+        if (!apiEndpoint) {
+            throw new Error('Textract Get Results API endpoint is not configured. Please check your environment variables.');
+        }
+
+        // Build request body
+        const requestBody = {
+            jobId: jobId
+        };
+        
+        // Add nextToken if provided for pagination
+        if (nextToken) {
+            requestBody.nextToken = nextToken;
+        }
+
+        // Call the API Gateway endpoint
+        const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to get Textract results: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        // Return the response data
+        return {
+            success: true,
+            jobStatus: data.jobStatus,
+            statusMessage: data.statusMessage,
+            blocks: data.blocks || [],
+            documentMetadata: data.documentMetadata,
+            nextToken: data.nextToken,
+            hasMoreResults: data.hasMoreResults || false,
+            analyzeDocumentModelVersion: data.analyzeDocumentModelVersion,
+            warnings: data.warnings
+        };
+    } catch (error) {
+        console.error('Error getting Textract results:', error);
+        throw error;
+    }
+}
+
+/**
+ * Poll Textract job until completion and retrieve all results with pagination.
+ * 
+ * @param {string} jobId - The Textract job ID
+ * @param {number} pollInterval - Polling interval in milliseconds (default: 5000)
+ * @param {number} maxAttempts - Maximum number of polling attempts (default: 60)
+ * @param {function} onProgress - Optional callback for progress updates
+ * @returns {Promise<Object>} Complete Textract results
+ */
+export async function pollTextractResults(jobId, pollInterval = 5000, maxAttempts = 60, onProgress = null) {
+    try {
+        let attempts = 0;
+        
+        // Poll until job completes or max attempts reached
+        while (attempts < maxAttempts) {
+            attempts++;
+            
+            // Get current job status
+            const result = await getTextractResults(jobId);
+            
+            // Call progress callback if provided
+            if (onProgress) {
+                onProgress({
+                    attempt: attempts,
+                    maxAttempts: maxAttempts,
+                    jobStatus: result.jobStatus,
+                    statusMessage: result.statusMessage
+                });
+            }
+            
+            // If job is still in progress, wait and try again
+            if (result.jobStatus === 'IN_PROGRESS') {
+                await new Promise(resolve => setTimeout(resolve, pollInterval));
+                continue;
+            }
+            
+            // If job failed, throw error
+            if (result.jobStatus === 'FAILED') {
+                throw new Error(`Textract job failed: ${result.statusMessage || 'Unknown error'}`);
+            }
+            
+            // Job succeeded - now collect all paginated results
+            if (result.jobStatus === 'SUCCEEDED' || result.jobStatus === 'PARTIAL_SUCCESS') {
+                let allBlocks = result.blocks || [];
+                let currentNextToken = result.nextToken;
+                
+                // Keep fetching pages while nextToken exists
+                while (currentNextToken) {
+                    const pageResult = await getTextractResults(jobId, currentNextToken);
+                    
+                    if (pageResult.blocks) {
+                        allBlocks = allBlocks.concat(pageResult.blocks);
+                    }
+                    
+                    currentNextToken = pageResult.nextToken;
+                    
+                    // Call progress callback for pagination
+                    if (onProgress) {
+                        onProgress({
+                            attempt: attempts,
+                            maxAttempts: maxAttempts,
+                            jobStatus: result.jobStatus,
+                            statusMessage: 'Fetching paginated results...',
+                            totalBlocks: allBlocks.length,
+                            hasMorePages: !!currentNextToken
+                        });
+                    }
+                }
+                
+                // Return complete results
+                return {
+                    success: true,
+                    jobStatus: result.jobStatus,
+                    statusMessage: result.statusMessage,
+                    blocks: allBlocks,
+                    documentMetadata: result.documentMetadata,
+                    analyzeDocumentModelVersion: result.analyzeDocumentModelVersion,
+                    warnings: result.warnings,
+                    totalBlocks: allBlocks.length
+                };
+            }
+            
+            // Unknown status
+            throw new Error(`Unknown job status: ${result.jobStatus}`);
+        }
+        
+        // Max attempts reached
+        throw new Error(`Polling timeout: Job did not complete after ${maxAttempts} attempts`);
+        
+    } catch (error) {
+        console.error('Error polling Textract results:', error);
+        throw error;
+    }
+}
