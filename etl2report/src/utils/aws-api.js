@@ -88,6 +88,7 @@ export async function uploadFile(file, bucketName, key = null, description = '')
             body: JSON.stringify({
                 bucket: bucketName,
                 key: s3Key,
+                method: 'put',
                 contentType: file.type,
                 description: description
             })
@@ -425,6 +426,68 @@ export async function listS3Folders(bucket, parentFolder = '') {
         };
     } catch (error) {
         console.error('Error listing S3 folders:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get a presigned URL for downloading a file from S3.
+ * 
+ * @param {string} bucket - The S3 bucket name
+ * @param {string} key - The S3 object key (file path)
+ * @returns {Promise<string>} The presigned URL for GET operation
+ */
+export async function getPresignedUrlForGet(bucket, key) {
+    try {
+        // Get the auth session details
+        const { token } = await getAuthSession();
+        
+        // Validate required parameters
+        if (!token) {
+            throw new Error('Authentication token is missing');
+        }
+        if (!bucket) {
+            throw new Error('Bucket name is required');
+        }
+        if (!key) {
+            throw new Error('Key is required');
+        }
+        
+        // Use the same endpoint as PUT, but with method: 'get'
+        const apiEndpoint = import.meta.env.VITE_AWS_S3_PUT_API_ENDPOINT;
+        if (!apiEndpoint) {
+            throw new Error('S3 presigned URL API endpoint is not configured. Please check your environment variables.');
+        }
+
+        // Call the API Gateway endpoint
+        const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                bucket: bucket,
+                key: key,
+                method: 'get'
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to get presigned URL: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (!data.presignedUrl) {
+            throw new Error('No presigned URL returned from server');
+        }
+        
+        // Return the presigned URL
+        return data.presignedUrl;
+    } catch (error) {
+        console.error('Error getting presigned URL for GET:', error);
         throw error;
     }
 }

@@ -1,9 +1,9 @@
 ﻿import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { setReportFile } from '../store/dash/actions/newTemplate';
-import { resetPdfViewer } from '../store/dash/pdfViewer';
+import { resetPdfViewer, setPdfUrl, setTextractBlocks, setLoading } from '../store/dash/pdfViewer';
 import { setActionsDefaultHeight } from '../store/dash/sizing';
-import { fetchTemplates } from '../store/dash/templates';
+import { fetchTemplates, fetchTemplatePdf, fetchTemplateTextract } from '../store/dash/templates';
 import Button from './Button';
 import NewTemplate from './NewTemplate';
 
@@ -36,7 +36,40 @@ export default function Actions() {
     }, [dispatch]);
 
     const handleTemplateChange = (e) => {
-        setSelectedTemplate(e.target.value);
+        const templateName = e.target.value;
+        setSelectedTemplate(templateName);
+        
+        // If a template is selected, load its PDF
+        if (templateName) {
+            loadTemplatePdf(templateName);
+        } else {
+            // Clear the PDF viewer if no template selected
+            dispatch(resetPdfViewer());
+        }
+    };
+    
+    const loadTemplatePdf = async (templateName) => {
+        try {
+            dispatch(setLoading(true));
+            const pdfUrl = await dispatch(fetchTemplatePdf(templateName));
+            dispatch(setPdfUrl(pdfUrl));
+        } catch (error) {
+            console.error('Failed to load template PDF:', error);
+            // Error is already handled in the thunk, just log here
+        }
+    };
+    
+    const handleEditClick = async () => {
+        if (!selectedTemplate) return;
+        
+        try {
+            const blocks = await dispatch(fetchTemplateTextract(selectedTemplate));
+            dispatch(setTextractBlocks(blocks));
+            // You might want to show a success message or notification here
+        } catch (error) {
+            console.error('Failed to load Textract results:', error);
+            alert('Failed to load template analysis results. Please try again.');
+        }
     };
 
     const handleNewClick = () => {
@@ -123,7 +156,7 @@ export default function Actions() {
                     />
                     <Button
                         displayText="Edit"
-                        onClick={() => alert('Edit action triggered')}
+                        onClick={handleEditClick}
                         variant='secondary'
                         size='small'
                         className='w-full'

@@ -7,16 +7,18 @@ from lambda_utils import create_response, get_client_with_assumed_role
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
-    AWS Lambda function to generate S3 presigned URLs for file uploads.
+    AWS Lambda function to generate S3 presigned URLs for file operations (GET/PUT).
     
     This function is designed to be invoked via API Gateway as a Lambda proxy.
     It expects the following in the request body:
     - bucket: S3 bucket name
     - key: S3 object key (file path)
-    - contentType: MIME type of the file to be uploaded
+    - method: 'get' or 'put' (default: 'put')
+    - contentType: MIME type (required for PUT operations only)
+    - description: Optional metadata for PUT operations
     
     Returns:
-    - presignedUrl: The S3 presigned URL for PUT operation
+    - presignedUrl: The S3 presigned URL for the requested operation
     """
     
     # Get role ARN from environment variable
@@ -35,6 +37,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Extract required parameters
         bucket = body.get('bucket')
         key = body.get('key')
+        method = body.get('method', 'put').lower()
         content_type = body.get('contentType')
         description = body.get('description', '')
         
@@ -45,12 +48,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if not key:
             return create_response(400, {'error': 'Missing required parameter: key'})
         
-        if not content_type:
-            return create_response(400, {'error': 'Missing required parameter: contentType'})
+        # Validate method
+        if method not in ['get', 'put']:
+            return create_response(400, {'error': f'Invalid method: {method}. Must be "get" or "put"'})
         
-        # Validate file type - only allow PDF files
-        if content_type != 'application/pdf':
-            return create_response(400, {'error': f'Invalid file type: {content_type}. Only PDF files (application/pdf) are allowed'})
+        # Validate content type for PUT operations
+        if method == 'put':
+            if not content_type:
+                return create_response(400, {'error': 'Missing required parameter: contentType (required for PUT operations)'})
+            
+            # Validate file type - only allow PDF files for PUT
+            if content_type != 'application/pdf':
+                return create_response(400, {'error': f'Invalid file type: {content_type}. Only PDF files (application/pdf) are allowed'})
         
         # Extract user ID from Cognito authorizer claims
         claims = event.get('requestContext', {}).get('authorizer', {}).get('claims', {})
@@ -71,48 +80,67 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         s3_client = get_client_with_assumed_role('s3', role_arn, user_id)
         
         # Log the request (useful for debugging)
-        print(f"Generating presigned URL for user: {user_id}, bucket: {bucket}, key: {key}")
+        print(f"Generating {method.upper()} presigned URL for user: {user_id}, bucket: {bucket}, key: {key}")
         
-        # Check if the key already exists in the bucket
+        # Check object existence based on method
         try:
             s3_client.head_object(Bucket=bucket, Key=key)
-            # If head_object succeeds, the object exists
-            return create_response(409, {'error': f'Object already exists at key: {key}'})
+            # Object exists
+            if method == 'put':
+                # For PUT, object shouldn't exist
+                return create_response(409, {'error': f'Object already exists at key: {key}'})
+            # For GET, object exists - this is good, continue
         except s3_client.exceptions.NoSuchKey:
-            # Object doesn't exist, which is what we want
-            pass
+            # Object doesn't exist
+            if method == 'get':
+                # For GET, object should exist
+                return create_response(404, {'error': f'Object not found at key: {key}'})
+            # For PUT, object doesn't exist - this is good, continue
         except s3_client.exceptions.ClientError as e:
             # Check if it's a 404 error (object doesn't exist)
             if e.response['Error']['Code'] == '404':
-                # Object doesn't exist, which is what we want
-                pass
+                if method == 'get':
+                    return create_response(404, {'error': f'Object not found at key: {key}'})
+                # For PUT, continue
             else:
                 # Some other error occurred
                 raise
         
-        # Generate presigned URL for PUT operation
-        params = {
-            'Bucket': bucket,
-            'Key': key,
-            'ContentType': content_type,
-        }
-        
-        # Add metadata if description is provided
-        if description:
-            params['Metadata'] = {'description': description}
-        
-        presigned_url = s3_client.generate_presigned_url(
-            'put_object',
-            Params=params,
-            ExpiresIn=expiration,
-            HttpMethod='PUT'
-        )
+        # Generate presigned URL based on method
+        if method == 'put':
+            params = {
+                'Bucket': bucket,
+                'Key': key,
+                'ContentType': content_type,
+            }
+            
+            # Add metadata if description is provided
+            if description:
+                params['Metadata'] = {'description': description}
+            
+            presigned_url = s3_client.generate_presigned_url(
+                'put_object',
+                Params=params,
+                ExpiresIn=expiration,
+                HttpMethod='PUT'
+            )
+        else:  # method == 'get'
+            presigned_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': bucket,
+                    'Key': key,
+                },
+                ExpiresIn=expiration,
+                HttpMethod='GET'
+            )
         
         # Return successful response
         return create_response(200, {
             'presignedUrl': presigned_url,
             'bucket': bucket,
             'key': key,
+            'method': method,
             'expiresIn': expiration
         })
         
