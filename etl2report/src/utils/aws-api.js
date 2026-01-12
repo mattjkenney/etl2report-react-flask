@@ -371,13 +371,14 @@ export async function pollTextractResults(jobId, pollInterval = 5000, maxAttempt
 }
 
 /**
- * List all sub-folders in an S3 bucket under a specified parent folder.
+ * List sub-folders or files in an S3 bucket under a specified parent folder.
  * 
  * @param {string} bucket - The S3 bucket name
  * @param {string} parentFolder - The parent folder path (optional, defaults to user's root)
- * @returns {Promise<Object>} Object containing array of folder names
+ * @param {boolean} listFiles - If true, lists files; if false, lists folders (default: false)
+ * @returns {Promise<Object>} Object containing array of folder names or file objects
  */
-export async function listS3Folders(bucket, parentFolder = '') {
+export async function listS3Objects(bucket, parentFolder = '', listFiles = false) {
     try {
         // Get the auth session details
         const { token } = await getAuthSession();
@@ -405,27 +406,39 @@ export async function listS3Folders(bucket, parentFolder = '') {
             },
             body: JSON.stringify({
                 bucket: bucket,
-                parent_folder: parentFolder
+                parent_folder: parentFolder,
+                list_files: listFiles
             })
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Failed to list S3 folders: ${response.status}`);
+            throw new Error(errorData.error || `Failed to list S3 ${listFiles ? 'files' : 'folders'}: ${response.status}`);
         }
 
         const data = await response.json();
         
         // Return success data
-        return {
-            success: true,
-            folders: data.folders || [],
-            bucket: data.bucket,
-            parentFolder: data.parent_folder,
-            prefix: data.prefix
-        };
+        if (listFiles) {
+            return {
+                success: true,
+                files: data.files || [],
+                bucket: data.bucket,
+                parentFolder: data.parent_folder,
+                prefix: data.prefix,
+                count: data.count || 0
+            };
+        } else {
+            return {
+                success: true,
+                folders: data.folders || [],
+                bucket: data.bucket,
+                parentFolder: data.parent_folder,
+                prefix: data.prefix
+            };
+        }
     } catch (error) {
-        console.error('Error listing S3 folders:', error);
+        console.error(`Error listing S3 ${listFiles ? 'files' : 'folders'}:`, error);
         throw error;
     }
 }
@@ -488,6 +501,107 @@ export async function getPresignedUrlForGet(bucket, key) {
         return data.presignedUrl;
     } catch (error) {
         console.error('Error getting presigned URL for GET:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get Textract results from S3 for a specific template.
+ * Lists all Textract output files (which are prefixed with job IDs) and fetches all of them.
+ * 
+ * @param {string} bucket - The S3 bucket name
+ * @param {string} templateName - The template name
+ * @returns {Promise<Object>} Object with combined blocks array from all files and metadata
+ */
+export async function getTextractResultsFromS3(bucket, templateName) {
+    try {
+        // Get the auth session details
+        const { sub } = await getAuthSession();
+        
+        // Validate required parameters
+        if (!sub) {
+            throw new Error('User ID is missing');
+        }
+        if (!bucket) {
+            throw new Error('Bucket name is required');
+        }
+        if (!templateName) {
+            throw new Error('Template name is required');
+        }
+        
+        // Construct the parent folder path for Textract output
+        // Format: templates/{template_name}/textract-output
+        const parentFolder = `templates/${templateName}/textract-output`;
+        
+        console.log(`Listing Textract result files for template: ${templateName}`);
+        
+        // List all files in the textract-output folder using listS3Objects with listFiles=true
+        const filesResult = await listS3Objects(bucket, parentFolder, true);
+        
+        if (!filesResult.files || filesResult.files.length === 0) {
+            throw new Error(`No Textract result files found for template: ${templateName}`);
+        }
+        
+        // Filter out s3_access_check files - Textract files don't have extensions
+        const textractFiles = filesResult.files.filter(file => !file.fileName.endsWith('s3_access_check'));
+        
+        if (textractFiles.length === 0) {
+            throw new Error(`No Textract result files found for template: ${templateName}`);
+        }
+        
+        console.log(`Found ${textractFiles.length} Textract result files`);
+        
+        // Fetch all Textract result files in parallel
+        const allBlocks = [];
+        const fetchPromises = textractFiles.map(async (file) => {
+            try {
+                // Get presigned URL for this file
+                const presignedUrl = await getPresignedUrlForGet(bucket, file.key);
+                
+                // Fetch the JSON file
+                const fileResponse = await fetch(presignedUrl);
+                
+                if (!fileResponse.ok) {
+                    console.error(`Failed to fetch file ${file.fileName}: ${fileResponse.status}`);
+                    return [];
+                }
+                
+                const textractData = await fileResponse.json();
+                
+                // Extract blocks - handle both 'Blocks' and 'blocks' keys
+                const blocks = textractData.Blocks || textractData.blocks || [];
+                
+                console.log(`Fetched ${blocks.length} blocks from ${file.fileName}`);
+                
+                return blocks;
+            } catch (error) {
+                console.error(`Error fetching file ${file.fileName}:`, error);
+                return [];
+            }
+        });
+        
+        // Wait for all files to be fetched
+        const resultsArray = await Promise.all(fetchPromises);
+        
+        // Combine all blocks from all files
+        resultsArray.forEach(blocks => {
+            if (blocks && blocks.length > 0) {
+                allBlocks.push(...blocks);
+            }
+        });
+        
+        console.log(`Total blocks fetched: ${allBlocks.length}`);
+        
+        // Return success data with metadata
+        return {
+            success: true,
+            blocks: allBlocks,
+            blocksCount: allBlocks.length,
+            filesCount: textractFiles.length,
+            fileNames: textractFiles.map(f => f.fileName)
+        };
+    } catch (error) {
+        console.error('Error getting Textract results from S3:', error);
         throw error;
     }
 }

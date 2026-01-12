@@ -6,6 +6,7 @@ import { setActionsDefaultHeight } from '../store/dash/sizing';
 import { fetchTemplates, fetchTemplatePdf, fetchTemplateTextract } from '../store/dash/templates';
 import Button from './Button';
 import NewTemplate from './NewTemplate';
+import EditTemplate from './EditTemplate';
 
 export default function Actions() {
     const dispatch = useDispatch();
@@ -13,6 +14,7 @@ export default function Actions() {
     const { templates, loading, error } = useSelector(state => state.templates);
     const [selectedTemplate, setSelectedTemplate] = useState('');
     const [showNewTemplate, setShowNewTemplate] = useState(false);
+    const [showEditTemplate, setShowEditTemplate] = useState(false);
 
     // Fetch templates on component mount
     useEffect(() => {
@@ -62,6 +64,9 @@ export default function Actions() {
     const handleEditClick = async () => {
         if (!selectedTemplate) return;
         
+        // Show the EditTemplate component first
+        setShowEditTemplate(true);
+        
         try {
             const blocks = await dispatch(fetchTemplateTextract(selectedTemplate));
             dispatch(setTextractBlocks(blocks));
@@ -83,8 +88,42 @@ export default function Actions() {
         // Clear the PDF viewer
         dispatch(resetPdfViewer());
     };
+    
+    const handleBackFromEdit = () => {
+        setShowEditTemplate(false);
+        // Clear the PDF viewer
+        dispatch(resetPdfViewer());
+    };
 
     const isTemplateSelected = selectedTemplate !== '';
+
+    // If showing edit template form, render it instead of the main actions
+    if (showEditTemplate) {
+        return (
+            <div 
+                className="bg-theme-secondary border border-theme-primary rounded-lg dashboard-content overflow-y-auto"
+                style={{ maxHeight: `${actionsDefaultHeight}px` }}
+            >
+                <div className="p-4">
+                    <div className="flex items-center mb-4">
+                        <Button
+                            displayText="← Back"
+                            onClick={handleBackFromEdit}
+                            variant="secondary"
+                            size="small"
+                            type="button"
+                        />
+                    </div>
+                    <div className="space-y-4">
+                        <EditTemplate 
+                            templateName={selectedTemplate}
+                            onBack={handleBackFromEdit}
+                        />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // If showing new template form, render it instead of the main actions
     if (showNewTemplate) {

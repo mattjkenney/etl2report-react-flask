@@ -1,5 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit';
-import { listS3Folders, getPresignedUrlForGet } from '../../utils/aws-api';
+import { listS3Objects, getPresignedUrlForGet, getTextractResultsFromS3 } from '../../utils/aws-api';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
 const initialState = {
@@ -87,6 +87,16 @@ const templatesSlice = createSlice({
                 state.loadedTextract = {};
             }
         },
+        // Add a new template to the list
+        addTemplate: (state, action) => {
+            const templateName = action.payload;
+            // Only add if it doesn't already exist
+            if (!state.templates.includes(templateName)) {
+                state.templates.push(templateName);
+                // Keep the list sorted
+                state.templates.sort();
+            }
+        },
     },
 });
 
@@ -103,6 +113,7 @@ export const {
     fetchTextractFailure,
     clearPdfCache,
     clearTextractCache,
+    addTemplate,
 } = templatesSlice.actions;
 
 // Thunk action to fetch templates from S3
@@ -123,7 +134,7 @@ export const fetchTemplates = (bucket, parentFolder = 'templates', forceRefresh 
         
         console.log('Fetching templates list from API');
         dispatch(fetchTemplatesStart());
-        const result = await listS3Folders(bucket, parentFolder);
+        const result = await listS3Objects(bucket, parentFolder);
         dispatch(fetchTemplatesSuccess({
             folders: result.folders,
             bucket: result.bucket,
@@ -195,9 +206,10 @@ export const fetchTemplatePdf = (templateName, forceRefresh = false) => async (d
 /**
  * Thunk action to fetch template Textract results with caching
  * @param {string} templateName - Name of the template
+ * @param {string} subsequentCall - The result file identifier (default: '1')
  * @param {boolean} forceRefresh - Force fetch even if cached
  */
-export const fetchTemplateTextract = (templateName, forceRefresh = false) => async (dispatch, getState) => {
+export const fetchTemplateTextract = (templateName, subsequentCall = '1', forceRefresh = false) => async (dispatch, getState) => {
     try {
         const state = getState();
         const { loadedTextract, loadingTextract, bucket } = state.templates;
@@ -224,23 +236,11 @@ export const fetchTemplateTextract = (templateName, forceRefresh = false) => asy
         
         dispatch(fetchTextractStart(templateName));
         
-        // Construct S3 key for the Textract results JSON
-        const s3Key = `${sub}/templates/${templateName}/textract-output/textract-results.json`;
+        // Use the new API that returns presigned URL for the Textract results
+        const result = await getTextractResultsFromS3(bucket, templateName, subsequentCall);
         
-        // Get presigned URL and fetch the JSON file
-        const url = await getPresignedUrlForGet(bucket, s3Key);
-        
-        // Fetch the JSON content
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch Textract results: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        const blocks = data.blocks || [];
-        
-        dispatch(fetchTextractSuccess({ templateName, blocks }));
-        return blocks;
+        dispatch(fetchTextractSuccess({ templateName, blocks: result.blocks }));
+        return result.blocks;
         
     } catch (error) {
         console.error(`Error fetching Textract results for template ${templateName}:`, error);

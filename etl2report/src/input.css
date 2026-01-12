@@ -316,6 +316,14 @@ button:focus:not(:focus-visible) {
   width: 8px;
 }
 
+.w-4 {
+  width: 1rem;
+}
+
+.h-4 {
+  height: 1rem;
+}
+
 /* Additional position classes */
 .relative {
   position: relative;

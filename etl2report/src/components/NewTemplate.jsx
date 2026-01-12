@@ -2,6 +2,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useState, useEffect } from 'react';
 import { setReportFile, updateFormField } from '../store/dash/actions/newTemplate';
 import { setPdfUrl, resetPdfViewer, setLoading, setTextractBlocks } from '../store/dash/pdfViewer';
+import { fetchTextractStart, fetchTextractSuccess, fetchTextractFailure, addTemplate } from '../store/dash/templates';
 import { addMessage } from '../store/messages';
 import { uploadFile, startTextractAnalysis, pollTextractResults } from '../utils/aws-api';
 import Button from './Button';
@@ -95,8 +96,11 @@ export default function NewTemplate() {
         }
 
         try {
-            // Set loading state
+            // Set loading state for PDF viewer
             dispatch(setLoading(true));
+            
+            // Set loading state for Textract (shows spinner in View component)
+            dispatch(fetchTextractStart(formData.templateName));
 
             // Attempt to upload the file
             const bucketName = import.meta.env.VITE_AWS_S3_BUCKET;
@@ -133,6 +137,12 @@ export default function NewTemplate() {
 
             // Store Textract blocks in Redux for bounding box rendering
             dispatch(setTextractBlocks(textractResults.blocks));
+            
+            // Mark Textract loading as complete
+            dispatch(fetchTextractSuccess({
+                templateName: formData.templateName,
+                blocks: textractResults.blocks
+            }));
 
             // Show success message with results
             dispatch(addMessage({
@@ -140,6 +150,9 @@ export default function NewTemplate() {
                 message: `Template created successfully! Textract analysis complete. Extracted ${textractResults.totalBlocks} blocks from document.`,
                 isError: false
             }));
+            
+            // Add the new template to the templates list (remove .pdf extension)
+            dispatch(addTemplate(formData.templateName.replace(/\.pdf$/i, '')));
             
             // Optionally reset the form after successful submission
             // setActualFile(null);
@@ -169,6 +182,9 @@ export default function NewTemplate() {
                 message: errorMessage,
                 isError: true
             }));
+            
+            // Mark Textract loading as failed
+            dispatch(fetchTextractFailure());
         } finally {
             dispatch(setLoading(false));
         }
