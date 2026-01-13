@@ -21,7 +21,44 @@ export default function View() {
     
     const [numPages, setNumPages] = useState(null);
     const [pageDimensions, setPageDimensions] = useState({ width: 0, height: 0 });
+    const [selectedBlockType, setSelectedBlockType] = useState('ALL');
     const pageRef = useRef(null);
+
+    const blockTypes = [
+        { type: 'ALL', label: 'All', color: 'gray' },
+        { type: 'PAGE', label: 'Page', color: 'slate' },
+        { type: 'LINE', label: 'Line', color: 'blue' },
+        { type: 'WORD', label: 'Word', color: 'green' },
+        { type: 'TABLE', label: 'Table', color: 'purple' },
+        { type: 'CELL', label: 'Cell', color: 'orange' },
+        { type: 'MERGED_CELL', label: 'Merged Cell', color: 'amber' },
+        { type: 'KEY_VALUE_SET', label: 'Key-Value', color: 'pink' },
+        { type: 'SELECTION_ELEMENT', label: 'Selection', color: 'cyan' },
+        { type: 'TITLE', label: 'Title', color: 'indigo' },
+        { type: 'QUERY', label: 'Query', color: 'teal' },
+        { type: 'QUERY_RESULT', label: 'Query Result', color: 'emerald' },
+        { type: 'SIGNATURE', label: 'Signature', color: 'rose' },
+        { type: 'TABLE_TITLE', label: 'Table Title', color: 'violet' },
+        { type: 'TABLE_FOOTER', label: 'Table Footer', color: 'fuchsia' },
+        { type: 'LAYOUT_TEXT', label: 'Layout Text', color: 'lime' },
+        { type: 'LAYOUT_TITLE', label: 'Layout Title', color: 'sky' },
+        { type: 'LAYOUT_HEADER', label: 'Layout Header', color: 'red' },
+        { type: 'LAYOUT_FOOTER', label: 'Layout Footer', color: 'yellow' },
+        { type: 'LAYOUT_SECTION_HEADER', label: 'Section Header', color: 'emerald' },
+        { type: 'LAYOUT_PAGE_NUMBER', label: 'Page Number', color: 'blue' },
+        { type: 'LAYOUT_LIST', label: 'Layout List', color: 'green' },
+        { type: 'LAYOUT_FIGURE', label: 'Layout Figure', color: 'purple' },
+        { type: 'LAYOUT_TABLE', label: 'Layout Table', color: 'orange' },
+        { type: 'LAYOUT_KEY_VALUE', label: 'Layout K-V', color: 'pink' },
+    ];
+
+    // Get available block types from textractBlocks
+    const availableBlockTypes = textractBlocks 
+        ? ['ALL', ...new Set(textractBlocks.map(block => block.BlockType))]
+        : ['ALL'];
+    
+    // Filter to only show buttons for available block types
+    const visibleBlockTypes = blockTypes.filter(bt => availableBlockTypes.includes(bt.type));
 
     const onDocumentLoadSuccess = ({ numPages }) => {
         console.log('PDF loaded successfully:', numPages, 'pages');
@@ -173,9 +210,33 @@ export default function View() {
                 </div>
             </div>
 
-            {/* PDF Document Container */}
-            <div className="flex-1 overflow-auto p-4 bg-gray-100">
-                <div className="flex justify-center">
+            {/* PDF Document Container with Block Type Filter */}
+            <div className="flex-1 flex overflow-hidden">
+                {/* Block Type Filter Ribbon */}
+                {textractBlocks && showBoundingBoxes && (
+                    <div className="w-24 bg-theme-secondary border-r border-theme-primary p-2 overflow-y-auto">
+                        <div className="space-y-2">
+                            {visibleBlockTypes.map(({ type, label, color }) => (
+                                <button
+                                    key={type}
+                                    onClick={() => setSelectedBlockType(type)}
+                                    className={`w-full px-2 py-2 text-xs rounded transition-all ${
+                                        selectedBlockType === type
+                                            ? `bg-${color}-500 text-white font-semibold`
+                                            : 'bg-theme-tertiary text-theme-primary hover:bg-theme-border'
+                                    }`}
+                                    title={`Filter ${label} blocks`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                
+                {/* PDF Viewer */}
+                <div className="flex-1 overflow-auto p-4 bg-gray-100">
+                    <div className="flex justify-center">
                     <Document
                         file={pdfUrl}
                         onLoadStart={onLoadStart}
@@ -221,11 +282,13 @@ export default function View() {
                                         pageWidth={pageDimensions.width}
                                         pageHeight={pageDimensions.height}
                                         show={showBoundingBoxes}
+                                        filterBlockType={selectedBlockType}
                                     />
                                 )}
                             </div>
                         )}
                     </Document>
+                    </div>
                 </div>
             </div>
         </div>
