@@ -5,13 +5,14 @@ import { resetPdfViewer, setPdfUrl, setTextractBlocks, setLoading } from '../sto
 import { setActionsDefaultHeight } from '../store/dash/sizing';
 import { fetchTemplates, fetchTemplatePdf, fetchTemplateTextract } from '../store/dash/templates';
 import Button from './Button';
+import LoadingSpinner from './LoadingSpinner';
 import NewTemplate from './NewTemplate';
 import EditTemplate from './EditTemplate';
 
 export default function Actions() {
     const dispatch = useDispatch();
     const { actionsDefaultHeight } = useSelector(state => state.sizing);
-    const { templates, loading, error } = useSelector(state => state.templates);
+    const { templates, loading, error, loadingPdf } = useSelector(state => state.templates);
     const [selectedTemplate, setSelectedTemplate] = useState('');
     const [showNewTemplate, setShowNewTemplate] = useState(false);
     const [showEditTemplate, setShowEditTemplate] = useState(false);
@@ -83,14 +84,10 @@ export default function Actions() {
 
     const handleBackToActions = () => {
         setShowNewTemplate(false);
+        setShowEditTemplate(false);
+        setSelectedTemplate('');
         // Clear the file metadata when going back
         dispatch(setReportFile(null));
-        // Clear the PDF viewer
-        dispatch(resetPdfViewer());
-    };
-    
-    const handleBackFromEdit = () => {
-        setShowEditTemplate(false);
         // Clear the PDF viewer
         dispatch(resetPdfViewer());
     };
@@ -108,7 +105,7 @@ export default function Actions() {
                     <div className="flex items-center mb-4">
                         <Button
                             displayText="← Back"
-                            onClick={handleBackFromEdit}
+                            onClick={handleBackToActions}
                             variant="secondary"
                             size="small"
                             type="button"
@@ -117,7 +114,7 @@ export default function Actions() {
                     <div className="space-y-4">
                         <EditTemplate 
                             templateName={selectedTemplate}
-                            onBack={handleBackFromEdit}
+                            onBack={handleBackToActions}
                         />
                     </div>
                 </div>
@@ -163,7 +160,10 @@ export default function Actions() {
                         htmlFor="template-select"
                         className="block text-sm font-medium text-theme-primary mb-2"
                     >
-                        Select a Template
+                        <div className="flex items-center space-x-2">
+                            <span>Select a Template</span>
+                            {loadingPdf && <LoadingSpinner size="small" text="Loading..." />}
+                        </div>
                     </label>
                     <select
                         id="template-select"
