@@ -117,9 +117,13 @@ export const {
 } = templatesSlice.actions;
 
 // Thunk action to fetch templates from S3
-export const fetchTemplates = (bucket, parentFolder = 'templates', forceRefresh = false) => async (dispatch, getState) => {
+export const fetchTemplates = (bucket, forceRefresh = false) => async (dispatch, getState) => {
     try {
         const { loading, templates, templatesFetchedAt } = getState().templates;
+
+         // Get user ID from Amplify auth session
+        const session = await fetchAuthSession();
+        const sub = session.tokens?.idToken?.payload?.sub;
         
         // Don't fetch if already loading
         if (loading) {
@@ -131,6 +135,9 @@ export const fetchTemplates = (bucket, parentFolder = 'templates', forceRefresh 
             console.log('Using cached templates list');
             return;
         }
+
+         // Construct S3 key for the template PDF
+        const parentFolder = `users/${sub}/templates/`;
         
         console.log('Fetching templates list from API');
         dispatch(fetchTemplatesStart());
@@ -188,7 +195,7 @@ export const fetchTemplatePdf = (templateName, forceRefresh = false) => async (d
         dispatch(fetchPdfStart(templateName));
         
         // Construct S3 key for the template PDF
-        const s3Key = `${sub}/templates/${templateName}/${templateName}.pdf`;
+        const s3Key = `users/${sub}/templates/${templateName}/${templateName}.pdf`;
         
         // Get presigned URL for the PDF
         const url = await getPresignedUrlForGet(bucket, s3Key);
