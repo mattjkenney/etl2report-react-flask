@@ -5,6 +5,7 @@ import newTemplateReducer from './dash/actions/newTemplate.js'
 import pdfViewerReducer from './dash/pdfViewer.js'
 import messagesReducer from './messages.js'
 import templatesReducer from './dash/templates.js'
+import viewReducer from './dash/view.js'
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     pdfViewer: pdfViewerReducer,
     messages: messagesReducer,
     templates: templatesReducer,
+    view: viewReducer,
   },
 })
 

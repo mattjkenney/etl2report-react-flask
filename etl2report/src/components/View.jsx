@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { setCurrentPage, setTotalPages, setScale, setLoading, setError, setShowBoundingBoxes } from '../store/dash/pdfViewer';
+import { setSelectedBlockType } from '../store/dash/view';
 import Button from './Button';
 import BoundingBoxOverlay from './BoundingBoxOverlay';
 import LoadingSpinner from './LoadingSpinner';
@@ -18,10 +19,10 @@ export default function View() {
     const pdfViewer = useSelector((state) => state.pdfViewer);
     const { pdfUrl, currentPage, totalPages, scale, isLoading, error, textractBlocks, showBoundingBoxes } = pdfViewer;
     const { loadingTextract } = useSelector((state) => state.templates);
+    const selectedBlockType = useSelector((state) => state.view.selectedBlockType);
     
     const [numPages, setNumPages] = useState(null);
     const [pageDimensions, setPageDimensions] = useState({ width: 0, height: 0 });
-    const [selectedBlockType, setSelectedBlockType] = useState('ALL');
     const pageRef = useRef(null);
 
     const blockTypes = [
@@ -219,7 +220,7 @@ export default function View() {
                             {visibleBlockTypes.map(({ type, label, color }) => (
                                 <button
                                     key={type}
-                                    onClick={() => setSelectedBlockType(type)}
+                                    onClick={() => dispatch(setSelectedBlockType(type))}
                                     className={`w-full px-2 py-2 text-xs rounded transition-all ${
                                         selectedBlockType === type
                                             ? `bg-${color}-500 text-white font-semibold`

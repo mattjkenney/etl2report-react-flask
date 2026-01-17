@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { addBoundingBoxId, removeBoundingBoxId } from '../store/dash/view';
 
 /**
  * BoundingBoxOverlay Component
@@ -12,8 +14,10 @@ import { useState } from 'react';
  * @param {string} filterBlockType - Filter to show only specific block type ('ALL' shows all)
  */
 export default function BoundingBoxOverlay({ blocks, pageNumber, pageWidth, pageHeight, show = true, filterBlockType = 'ALL' }) {
+    const dispatch = useDispatch();
     const [selectedBlock, setSelectedBlock] = useState(null);
     const [hoveredBlock, setHoveredBlock] = useState(null);
+    const externalHoveredBlockId = useSelector((state) => state.view.hoveredBlockId);
 
     if (!show || !blocks || blocks.length === 0 || !pageWidth || !pageHeight) {
         return null;
@@ -73,11 +77,11 @@ export default function BoundingBoxOverlay({ blocks, pageNumber, pageWidth, page
         const height = bbox.Height * pageHeight;
 
         const isSelected = selectedBlock?.Id === block.Id;
-        const isHovered = hoveredBlock?.Id === block.Id;
-        const isDimmed = hoveredBlock && !isHovered;
+        const isHovered = hoveredBlock?.Id === block.Id || externalHoveredBlockId === block.Id;
+        const isDimmed = (hoveredBlock || externalHoveredBlockId) && !isHovered;
 
         const blockTypeClass = getBlockTypeClass(block.BlockType);
-        const className = `bbox-box bbox-${blockTypeClass} ${isSelected ? 'selected' : ''} ${isDimmed ? 'dimmed' : ''}`;
+        const className = `bbox-box bbox-${blockTypeClass} ${isSelected ? 'selected' : ''} ${isDimmed ? 'dimmed' : ''} ${isHovered ? 'hovered' : ''}`;
 
         return (
             <div
@@ -91,7 +95,15 @@ export default function BoundingBoxOverlay({ blocks, pageNumber, pageWidth, page
                 }}
                 onClick={(e) => {
                     e.stopPropagation();
+                    const wasSelected = isSelected;
                     setSelectedBlock(isSelected ? null : block);
+                    
+                    // Dispatch to Redux store for EditTemplate to track
+                    if (wasSelected) {
+                        dispatch(removeBoundingBoxId(block.Id));
+                    } else {
+                        dispatch(addBoundingBoxId(block.Id));
+                    }
                 }}
                 onMouseEnter={() => setHoveredBlock(block)}
                 onMouseLeave={() => setHoveredBlock(null)}
