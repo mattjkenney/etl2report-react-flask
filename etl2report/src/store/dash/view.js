@@ -30,8 +30,15 @@ const viewSlice = createSlice({
         setSelectedBlockType: (state, action) => {
             state.selectedBlockType = action.payload;
         },
+        reorderBoundingBoxIds: (state, action) => {
+            const { fromIndex, toIndex } = action.payload;
+            const items = [...state.selectedBoundingBoxIds];
+            const [removed] = items.splice(fromIndex, 1);
+            items.splice(toIndex, 0, removed);
+            state.selectedBoundingBoxIds = items;
+        },
     },
 });
 
-export const { addBoundingBoxId, removeBoundingBoxId, clearBoundingBoxIds, setHoveredBlockId, setSelectedBlockType } = viewSlice.actions;
+export const { addBoundingBoxId, removeBoundingBoxId, clearBoundingBoxIds, setHoveredBlockId, setSelectedBlockType, reorderBoundingBoxIds } = viewSlice.actions;
 export default viewSlice.reducer;

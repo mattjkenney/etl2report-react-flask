@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { clearBoundingBoxIds } from '../store/dash/view';
+import { clearBoundingBoxIds, reorderBoundingBoxIds } from '../store/dash/view';
 import ManualInput from './ManualInput';
 
 export default function EditTemplate({ templateName, onBack }) {
     const dispatch = useDispatch();
     const [expandedSection, setExpandedSection] = useState(null);
+    const [draggedIndex, setDraggedIndex] = useState(null);
     const { selectedBoundingBoxIds } = useSelector((state) => state.view);
 
     const sections = [
@@ -17,6 +18,24 @@ export default function EditTemplate({ templateName, onBack }) {
 
     const toggleSection = (sectionId) => {
         setExpandedSection(expandedSection === sectionId ? null : sectionId);
+    };
+
+    const handleDragStart = (e, index) => {
+        setDraggedIndex(index);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragOver = (e, index) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDrop = (e, dropIndex) => {
+        e.preventDefault();
+        if (draggedIndex !== null && draggedIndex !== dropIndex) {
+            dispatch(reorderBoundingBoxIds({ fromIndex: draggedIndex, toIndex: dropIndex }));
+        }
+        setDraggedIndex(null);
     };
 
     return (
@@ -73,6 +92,10 @@ export default function EditTemplate({ templateName, onBack }) {
                                                         key={id}
                                                         id={id}
                                                         index={index + 1}
+                                                        onDragStart={handleDragStart}
+                                                        onDragOver={handleDragOver}
+                                                        onDrop={handleDrop}
+                                                        isDragging={draggedIndex === index}
                                                     />
                                                 ))}
                                             </div>
