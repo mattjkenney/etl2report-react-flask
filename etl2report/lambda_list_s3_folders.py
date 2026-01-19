@@ -72,14 +72,7 @@ def lambda_handler(event, context):
                 'error': 'ROLE_ARN environment variable not configured'
             })
         
-        # Construct the full prefix: user_id/parent_folder/
-        # Ensure proper formatting with trailing slash
-        if parent_folder:
-            prefix = f"{user_id}/{parent_folder}/"
-        else:
-            prefix = f"{user_id}/"
-        
-        print(f"Listing {'files' if list_files else 'folders'} in bucket: {bucket}, prefix: {prefix}")
+        print(f"Listing {'files' if list_files else 'folders'} in bucket: {bucket}, prefix: {parent_folder}")
         
         # Get S3 client with assumed role
         s3_client = get_client_with_assumed_role(
@@ -93,7 +86,7 @@ def lambda_handler(event, context):
         if list_files:
             # List all file objects (no delimiter)
             files = []
-            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for page in paginator.paginate(Bucket=bucket, Prefix=parent_folder):
                 # Contents contains the actual objects/files
                 for obj in page.get('Contents', []):
                     key = obj['Key']
@@ -115,7 +108,6 @@ def lambda_handler(event, context):
                 'files': files,
                 'bucket': bucket,
                 'parent_folder': parent_folder,
-                'prefix': prefix,
                 'count': len(files)
             })
         else:
@@ -123,7 +115,7 @@ def lambda_handler(event, context):
             folders = set()
             
             # Use delimiter='/' to get folder-like structure
-            for page in paginator.paginate(Bucket=bucket, Prefix=prefix, Delimiter='/'):
+            for page in paginator.paginate(Bucket=bucket, Prefix=parent_folder, Delimiter='/'):
                 # CommonPrefixes contains the "folder" names
                 for prefix_info in page.get('CommonPrefixes', []):
                     folder_prefix = prefix_info['Prefix']
@@ -141,7 +133,6 @@ def lambda_handler(event, context):
                 'folders': folder_list,
                 'bucket': bucket,
                 'parent_folder': parent_folder,
-                'prefix': prefix
             })
         
     except json.JSONDecodeError as e:

@@ -66,7 +66,7 @@ export async function uploadFile(file, bucketName, key = null, description = '')
         }
 
         // Use provided key or construct default S3 key
-        const s3Key = `${sub}/templates/${S3Key_prefix}/${finalKey}`;
+        const s3Key = `users/${sub}/templates/${S3Key_prefix}/${finalKey}`;
 
         // console.log('Requesting pre-signed URL:', {
         //     fileSize: file.size,
@@ -163,7 +163,7 @@ export async function startTextractAnalysis(bucket, key, outputBucket, outputKey
             const keyParts = key.split('/');
             // Store textract output under the template folder: user_id/template_name/textract-output
             const templateName = keyParts[keyParts.length - 1].slice(0, -4); // Remove .pdf
-            finalOutputKeyPrefix = `${sub}/templates/${templateName}/textract-output`;
+            finalOutputKeyPrefix = `users/${sub}/templates/${templateName}/textract-jobs`;
         }
         
         // Verify we have an API endpoint
@@ -434,7 +434,6 @@ export async function listS3Objects(bucket, parentFolder = '', listFiles = false
                 folders: data.folders || [],
                 bucket: data.bucket,
                 parentFolder: data.parent_folder,
-                prefix: data.prefix
             };
         }
     } catch (error) {
@@ -531,7 +530,7 @@ export async function getTextractResultsFromS3(bucket, templateName) {
         
         // Construct the parent folder path for Textract output
         // Format: templates/{template_name}/textract-output
-        const parentFolder = `templates/${templateName}/textract-output`;
+        const parentFolder = `users/${sub}/templates/${templateName}/textract-jobs`;
         
         console.log(`Listing Textract result files for template: ${templateName}`);
         

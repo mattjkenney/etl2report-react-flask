@@ -1,5 +1,38 @@
 @import "tailwindcss";
 
+.form-label {
+  display: block;
+  font-size: 0.75rem; /* text-xs */
+  line-height: 1rem;
+  font-weight: 500; /* font-medium */
+  color: var(--color-text);
+  margin-bottom: 0.25rem; /* mb-1 */
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.25rem 0.5rem; /* px-2 py-1 */
+  font-size: 0.875rem; /* text-sm */
+  line-height: 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  background-color: var(--color-background);
+  color: var(--color-text);
+}
+
+.form-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.form-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+.form-field {
+  /* No specific styling needed, but provides semantic structure */
+}
+
 /* Root variables for light theme */
 :root {
   --color-text: #1f2937;
@@ -120,6 +153,10 @@
 }
 
 .text-theme-muted {
+  color: var(--color-text-muted);
+}
+
+.placeholder-theme-muted::placeholder {
   color: var(--color-text-muted);
 }
 
@@ -391,6 +428,7 @@ button:focus:not(:focus-visible) {
   top: 0;
   left: 0;
   pointer-events: none;
+  z-index: 10;
 }
 
 .bbox-box {
@@ -408,12 +446,61 @@ button:focus:not(:focus-visible) {
   border-width: 3px;
 }
 
+.bbox-box.hovered {
+  opacity: 0.5;
+  border-width: 3px;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.8);
+  animation: flashBorder 1.5s ease-in-out infinite;
+}
+
+@keyframes flashBorder {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.8);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+  }
+}
+
 .bbox-box.selected {
   opacity: 0.6;
   border-width: 3px;
 }
 
+.bbox-box.dimmed {
+  opacity: 0.1 !important;
+  border-width: 2px !important;
+}
+
+.bbox-box.dimmed:hover {
+  opacity: 0.15 !important;
+  border-width: 2px !important;
+}
+
+.bbox-box.highlighted {
+  opacity: 0.8 !important;
+  border-width: 4px !important;
+  animation: pulse 1s ease-in-out 3;
+  z-index: 1000;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
 /* Block type colors */
+.bbox-page {
+  background-color: rgba(148, 163, 184, 0.3);
+  border-color: rgb(148, 163, 184);
+}
+
 .bbox-line {
   background-color: rgba(59, 130, 246, 0.3);
   border-color: rgb(59, 130, 246);
@@ -434,9 +521,99 @@ button:focus:not(:focus-visible) {
   border-color: rgb(249, 115, 22);
 }
 
+.bbox-merged-cell {
+  background-color: rgba(251, 191, 36, 0.3);
+  border-color: rgb(251, 191, 36);
+}
+
 .bbox-key-value-set {
   background-color: rgba(236, 72, 153, 0.3);
   border-color: rgb(236, 72, 153);
+}
+
+.bbox-selection-element {
+  background-color: rgba(6, 182, 212, 0.3);
+  border-color: rgb(6, 182, 212);
+}
+
+.bbox-title {
+  background-color: rgba(99, 102, 241, 0.3);
+  border-color: rgb(99, 102, 241);
+}
+
+.bbox-query {
+  background-color: rgba(20, 184, 166, 0.3);
+  border-color: rgb(20, 184, 166);
+}
+
+.bbox-query-result {
+  background-color: rgba(16, 185, 129, 0.3);
+  border-color: rgb(16, 185, 129);
+}
+
+.bbox-signature {
+  background-color: rgba(244, 63, 94, 0.3);
+  border-color: rgb(244, 63, 94);
+}
+
+.bbox-table-title {
+  background-color: rgba(139, 92, 246, 0.3);
+  border-color: rgb(139, 92, 246);
+}
+
+.bbox-table-footer {
+  background-color: rgba(217, 70, 239, 0.3);
+  border-color: rgb(217, 70, 239);
+}
+
+.bbox-layout-text {
+  background-color: rgba(132, 204, 22, 0.3);
+  border-color: rgb(132, 204, 22);
+}
+
+.bbox-layout-title {
+  background-color: rgba(14, 165, 233, 0.3);
+  border-color: rgb(14, 165, 233);
+}
+
+.bbox-layout-header {
+  background-color: rgba(239, 68, 68, 0.3);
+  border-color: rgb(239, 68, 68);
+}
+
+.bbox-layout-footer {
+  background-color: rgba(234, 179, 8, 0.3);
+  border-color: rgb(234, 179, 8);
+}
+
+.bbox-layout-section-header {
+  background-color: rgba(5, 150, 105, 0.3);
+  border-color: rgb(5, 150, 105);
+}
+
+.bbox-layout-page-number {
+  background-color: rgba(37, 99, 235, 0.3);
+  border-color: rgb(37, 99, 235);
+}
+
+.bbox-layout-list {
+  background-color: rgba(22, 163, 74, 0.3);
+  border-color: rgb(22, 163, 74);
+}
+
+.bbox-layout-figure {
+  background-color: rgba(147, 51, 234, 0.3);
+  border-color: rgb(147, 51, 234);
+}
+
+.bbox-layout-table {
+  background-color: rgba(234, 88, 12, 0.3);
+  border-color: rgb(234, 88, 12);
+}
+
+.bbox-layout-key-value {
+  background-color: rgba(219, 39, 119, 0.3);
+  border-color: rgb(219, 39, 119);
 }
 
 .bbox-default {
@@ -461,6 +638,10 @@ button:focus:not(:focus-visible) {
 }
 
 /* Info panel border colors by block type */
+.bbox-info-panel-page {
+  border-color: rgb(148, 163, 184);
+}
+
 .bbox-info-panel-line {
   border-color: rgb(59, 130, 246);
 }
@@ -477,8 +658,80 @@ button:focus:not(:focus-visible) {
   border-color: rgb(249, 115, 22);
 }
 
+.bbox-info-panel-merged-cell {
+  border-color: rgb(251, 191, 36);
+}
+
 .bbox-info-panel-key-value-set {
   border-color: rgb(236, 72, 153);
+}
+
+.bbox-info-panel-selection-element {
+  border-color: rgb(6, 182, 212);
+}
+
+.bbox-info-panel-title {
+  border-color: rgb(99, 102, 241);
+}
+
+.bbox-info-panel-query {
+  border-color: rgb(20, 184, 166);
+}
+
+.bbox-info-panel-query-result {
+  border-color: rgb(16, 185, 129);
+}
+
+.bbox-info-panel-signature {
+  border-color: rgb(244, 63, 94);
+}
+
+.bbox-info-panel-table-title {
+  border-color: rgb(139, 92, 246);
+}
+
+.bbox-info-panel-table-footer {
+  border-color: rgb(217, 70, 239);
+}
+
+.bbox-info-panel-layout-text {
+  border-color: rgb(132, 204, 22);
+}
+
+.bbox-info-panel-layout-title {
+  border-color: rgb(14, 165, 233);
+}
+
+.bbox-info-panel-layout-header {
+  border-color: rgb(239, 68, 68);
+}
+
+.bbox-info-panel-layout-footer {
+  border-color: rgb(234, 179, 8);
+}
+
+.bbox-info-panel-layout-section-header {
+  border-color: rgb(5, 150, 105);
+}
+
+.bbox-info-panel-layout-page-number {
+  border-color: rgb(37, 99, 235);
+}
+
+.bbox-info-panel-layout-list {
+  border-color: rgb(22, 163, 74);
+}
+
+.bbox-info-panel-layout-figure {
+  border-color: rgb(147, 51, 234);
+}
+
+.bbox-info-panel-layout-table {
+  border-color: rgb(234, 88, 12);
+}
+
+.bbox-info-panel-layout-key-value {
+  border-color: rgb(219, 39, 119);
 }
 
 .bbox-info-panel-default {
@@ -561,6 +814,96 @@ button:focus:not(:focus-visible) {
 
 .dark .bbox-info-close:hover {
   color: var(--color-text);
+}
+
+/* Block type filter button colors */
+.bg-gray-500 {
+  background-color: #6b7280;
+}
+
+.bg-slate-500 {
+  background-color: #64748b;
+}
+
+.bg-blue-500 {
+  background-color: #3b82f6;
+}
+
+.bg-green-500 {
+  background-color: #22c55e;
+}
+
+.bg-purple-500 {
+  background-color: #a855f7;
+}
+
+.bg-orange-500 {
+  background-color: #f97316;
+}
+
+.bg-amber-500 {
+  background-color: #f59e0b;
+}
+
+.bg-pink-500 {
+  background-color: #ec4899;
+}
+
+.bg-cyan-500 {
+  background-color: #06b6d4;
+}
+
+.bg-indigo-500 {
+  background-color: #6366f1;
+}
+
+.bg-teal-500 {
+  background-color: #14b8a6;
+}
+
+.bg-emerald-500 {
+  background-color: #10b981;
+}
+
+.bg-rose-500 {
+  background-color: #f43f5e;
+}
+
+.bg-violet-500 {
+  background-color: #8b5cf6;
+}
+
+.bg-fuchsia-500 {
+  background-color: #d946ef;
+}
+
+.bg-lime-500 {
+  background-color: #84cc16;
+}
+
+.bg-sky-500 {
+  background-color: #0ea5e9;
+}
+
+.bg-red-500 {
+  background-color: #ef4444;
+}
+
+.bg-yellow-500 {
+  background-color: #eab308;
+}
+
+.text-white {
+  color: #ffffff;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.text-xs {
+  font-size: 0.75rem;
+  line-height: 1rem;
 }
 
 

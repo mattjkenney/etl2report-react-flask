@@ -21,7 +21,7 @@ export default function Actions() {
     useEffect(() => {
         const bucket = import.meta.env.VITE_AWS_S3_BUCKET;
         if (bucket) {
-            dispatch(fetchTemplates(bucket, 'templates'));
+            dispatch(fetchTemplates(bucket));
         }
     }, [dispatch]);
 
@@ -165,23 +165,44 @@ export default function Actions() {
                             {loadingPdf && <LoadingSpinner size="small" text="Loading..." />}
                         </div>
                     </label>
-                    <select
-                        id="template-select"
-                        name="template"
-                        value={selectedTemplate}
-                        onChange={handleTemplateChange}
-                        className="w-full px-3 py-2 border border-theme-primary rounded-md bg-theme-secondary text-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent mb-4"
-                        disabled={loading}
-                    >
-                        <option value="">
-                            {loading ? 'Loading templates...' : error ? 'Error loading templates' : 'Choose a template...'}
-                        </option>
-                        {templates.map((template) => (
-                            <option key={template} value={template}>
-                                {template}
+                    <div className="flex space-x-2">
+                        <select
+                            id="template-select"
+                            name="template"
+                            value={selectedTemplate}
+                            onChange={handleTemplateChange}
+                            className="flex-1 px-3 py-2 border border-theme-primary rounded-md bg-theme-secondary text-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent"
+                            disabled={loading}
+                        >
+                            <option value="">
+                                {loading ? 'Loading templates...' : error ? 'Error loading templates' : 'Choose a template...'}
                             </option>
-                        ))}
-                    </select>
+                            {templates.map((template) => (
+                                <option key={template} value={template}>
+                                    {template}
+                                </option>
+                            ))}
+                        </select>
+                        {loading ? (
+                            <div className="flex items-center px-3">
+                                <LoadingSpinner size="small" />
+                            </div>
+                        ) : (
+                            <Button
+                                displayText="↻"
+                                onClick={() => {
+                                    const bucket = import.meta.env.VITE_AWS_S3_BUCKET;
+                                    if (bucket) {
+                                        dispatch(fetchTemplates(bucket, true));
+                                    }
+                                }}
+                                variant="ghost"
+                                size="small"
+                                type="button"
+                                title="Refresh templates"
+                            />
+                        )}
+                    </div>
                 </div>
 
                 <div className="space-y-3">

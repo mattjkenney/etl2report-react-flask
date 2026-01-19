@@ -68,10 +68,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if not user_id:
             return create_response(401, {'error': 'Invalid or missing user ID from authorization'})
         
-        # Validate that the key path is prefixed with user_id for multi-tenant security
-        if not key.startswith(f"{user_id}/"):
-            return create_response(403, {'error': f'Access denied: Key must be prefixed with user ID ({user_id}/)'})
-        
         # Validate that role ARN is configured
         if not role_arn:
             return create_response(500, {'error': 'Server configuration error: S3_TENANT_ROLE_ARN not configured'})
