@@ -82,7 +82,7 @@ export function formatWithSigFigs(value, sigFigs) {
     // (trailing zeros in integers are ambiguous without scientific notation)
     const hasTrailingZeros = isInteger && absRounded >= 10 && absRounded % 10 === 0;
     const needsScientific = absRounded >= Math.pow(10, precision) || (hasTrailingZeros && currentSigFigs > precision);
-    
+    console.log(absRounded);
     if (needsScientific) {
         // Format in scientific notation
         const coefficient = rounded / Math.pow(10, magnitude);

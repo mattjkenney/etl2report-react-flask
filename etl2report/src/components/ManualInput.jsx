@@ -13,6 +13,8 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
     const [helpText, setHelpText] = useState('');
     const [previewValue, setPreviewValue] = useState('');
     const [precision, setPrecision] = useState('');
+    const [min, setMin] = useState('');
+    const [max, setMax] = useState('');
     const [sigFigs, setSigFigs] = useState('');
     const [rounding, setRounding] = useState('');
 
@@ -95,6 +97,8 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                         <input
                                             type="number"
                                             placeholder="Enter minimum value"
+                                            value={min}
+                                            onChange={(e) => setMin(e.target.value)}
                                             className="form-input"
                                         />
                                     </div>
@@ -103,6 +107,8 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                         <input
                                             type="number"
                                             placeholder="Enter maximum value"
+                                            value={max}
+                                            onChange={(e) => setMax(e.target.value)}
                                             className="form-input"
                                         />
                                     </div>
@@ -118,6 +124,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                             value={sigFigs}
                                             onChange={(e) => setSigFigs(e.target.value)}
                                             className="form-input"
+                                            min={0}
                                         />
                                     </div>
                                     <div className="form-field">
@@ -132,6 +139,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                             value={rounding}
                                             onChange={(e) => setRounding(e.target.value)}
                                             className="form-input"
+                                            min={0}
                                         />
                                     </div>
                                 </>
@@ -149,6 +157,8 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                         value={previewValue}
                                         onChange={(e) => setPreviewValue(e.target.value)}
                                         step={type === 'number' && precision ? precision : undefined}
+                                        min={type === 'number' && min ? min : undefined}
+                                        max={type === 'number' && max ? max : undefined}
                                         className="w-full px-3 py-2 text-sm border border-theme-primary rounded bg-theme-primary text-theme-primary placeholder-theme-muted focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                     {previewValue && (
