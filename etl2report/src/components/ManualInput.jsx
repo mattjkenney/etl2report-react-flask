@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import TooltipButton from './TooltipButton';
 import IgnoredIndicator from './IgnoredIndicator';
 import ViewBoundingBoxButton from './ViewBoundingBoxButton';
 import VariableContainer from './VariableContainer';
-import { formatNumber } from '../utils/numberFormatting';
 
 export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop, isDragging }) {
     const textractBlocks = useSelector((state) => state.pdfViewer.textractBlocks);
@@ -15,17 +14,70 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
     const [precision, setPrecision] = useState('');
     const [min, setMin] = useState('');
     const [max, setMax] = useState('');
+    const [allowInequalities, setAllowInequalities] = useState(false);
+    const [inequalityOperator, setInequalityOperator] = useState('=');
     const [sigFigs, setSigFigs] = useState('');
     const [rounding, setRounding] = useState('');
+    const [formattedValue, setFormattedValue] = useState('');
 
     const block = textractBlocks?.find(b => b.Id === id);
 
-    const getFormattedPreviewValue = () => {
+    // Call backend API to format number when previewValue or formatting options change
+    useEffect(() => {
         if (type !== 'number' || !previewValue) {
-            return previewValue;
+            setFormattedValue(previewValue);
+            return;
         }
 
-        return formatNumber(previewValue, { sigFigs, rounding });
+        const formatNumber = async () => {
+            var isRoundingIgnored = sigFigs && parseFloat(sigFigs) !== 0;
+            var isSigFigsIgnored = rounding && parseFloat(rounding) !== 0;
+            if (isRoundingIgnored === isSigFigsIgnored ) {
+                setFormattedValue(previewValue);
+                return;
+            }
+            var apiEndpoint = '';
+            var data = {value: previewValue};
+            if (isRoundingIgnored && !isSigFigsIgnored) {
+                apiEndpoint = 'sig-figs';
+                data['sigFigs'] = sigFigs || 0;
+            }
+            else {
+                apiEndpoint = 'rounding';
+                data['decimalPlaces'] = rounding || 0;
+            }
+            
+            try {
+                const response = await fetch(`http://localhost:5000/api/format/${apiEndpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setFormattedValue(data.formatted);
+                } else {
+                    // Fallback to original value if API fails
+                    setFormattedValue(previewValue);
+                }
+            } catch (error) {
+                console.error('Error formatting number:', error);
+                // Fallback to original value if API fails
+                setFormattedValue(previewValue);
+            }
+        };
+
+        formatNumber();
+    }, [previewValue, sigFigs, rounding, type]);
+
+    const getFormattedPreviewValue = () => {
+        if (type === 'number' && allowInequalities && inequalityOperator !== '=') {
+            return inequalityOperator + formattedValue;
+        }
+        return formattedValue;
     };
 
     return (
@@ -113,6 +165,17 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                         />
                                     </div>
                                     <div className="form-field">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={allowInequalities}
+                                                onChange={(e) => setAllowInequalities(e.target.checked)}
+                                                className="form-checkbox h-4 w-4 rounded border-theme-primary text-blue-500 focus:ring-2 focus:ring-blue-500"
+                                            />
+                                            <span className="form-label mb-0">Allow Inequalities</span>
+                                        </label>
+                                    </div>
+                                    <div className="form-field">
                                         <div className="flex items-center gap-1 mb-1">
                                             <label className="form-label mb-0">Significant Figures</label>
                                             <TooltipButton content="The number of digits shown on the report, including both sides of the decimal. Significant Figures cannot be used with Rounding." />
@@ -139,7 +202,6 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                             value={rounding}
                                             onChange={(e) => setRounding(e.target.value)}
                                             className="form-input"
-                                            min={0}
                                         />
                                     </div>
                                 </>
@@ -151,6 +213,43 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                         <label className="form-label mb-0 text-sm">{prompt || 'Prompt'}</label>
                                         {helpText && <TooltipButton content={helpText} />}
                                     </div>
+                                    {type === 'number' && allowInequalities && (
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <label className="flex items-center gap-1 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="inequality"
+                                                    value="="
+                                                    checked={inequalityOperator === '='}
+                                                    onChange={(e) => setInequalityOperator(e.target.value)}
+                                                    className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-theme-primary">=</span>
+                                            </label>
+                                            <label className="flex items-center gap-1 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="inequality"
+                                                    value=">"
+                                                    checked={inequalityOperator === '>'}
+                                                    onChange={(e) => setInequalityOperator(e.target.value)}
+                                                    className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-theme-primary">&gt;</span>
+                                            </label>
+                                            <label className="flex items-center gap-1 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="inequality"
+                                                    value="<"
+                                                    checked={inequalityOperator === '<'}
+                                                    onChange={(e) => setInequalityOperator(e.target.value)}
+                                                    className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-theme-primary">&lt;</span>
+                                            </label>
+                                        </div>
+                                    )}
                                     <input
                                         type={type || 'text'}
                                         placeholder="Enter value"
