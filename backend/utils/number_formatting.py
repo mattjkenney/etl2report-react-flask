@@ -5,6 +5,59 @@ Python implementation matching the JavaScript numberFormatting.js functionality.
 
 from sigfig import round as sigfig_round
 from decimal import Decimal
+import numpy as np
+
+def format_scientific_notation_indicator(value: str, scientific_notation_indicator='E') -> str:
+    """
+    Convert a number in scientific notation to use a specified indicator.
+    
+    Args:
+        value (str): A string representation of a number, possibly in scientific notation.
+        scientific_notation_indicator (str): The indicator to use for scientific notation (default 'E').
+    """
+    
+    def to_superscript(text):
+        superscript_map = {
+            "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
+            "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+            "+": "⁺", "-": "⁻", "=": "⁼", "(": "⁽", ")": "⁾"
+        }
+        return ''.join(superscript_map.get(char, char) for char in str(text))
+    
+    def from_superscript(text):
+        reverse_map = {
+            "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
+            "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+            "⁺": "+", "⁻": "-", "⁼": "=", "⁽": "(", "⁾": ")"
+        }
+        return ''.join(reverse_map.get(char, char) for char in str(text))
+    
+    exponent_part = ''
+
+    # Check for existing scientific notation formats
+    patterns = [
+        ('e', 1, to_superscript, 'E'),
+        ('E', 1, to_superscript, 'e'),
+        (' x 10', 5, from_superscript, None)
+    ]
+    
+    for pattern, offset, transform, simple_replacement in patterns:
+        index = value.lower().find(pattern.lower()) if pattern == ' x 10' else value.find(pattern)
+        if index > -1:
+            if simple_replacement and scientific_notation_indicator == simple_replacement:
+                return value.replace(pattern, simple_replacement)
+            exponent_part = value[index + offset:]
+            exponent_change_function = transform
+            break
+
+    if exponent_part == '':
+        # No scientific notation found
+        return value
+
+
+    value = value[:index] + scientific_notation_indicator + exponent_change_function(exponent_part)
+        
+    return value
 
 def format_with_rounding(value: float, decimal_places: int, use_scientific_notation: bool = False) -> str:
     """
@@ -163,6 +216,12 @@ def count_sig_figs(value: str) -> int:
     
 
 if __name__ == "__main__":
+
+    assert format_scientific_notation_indicator('1.23E4', ' x 10') == '1.23 x 10⁴', format_scientific_notation_indicator('1.23E4', ' x 10')
+    assert format_scientific_notation_indicator('1.23e4', ' x 10') == '1.23 x 10⁴'
+    assert format_scientific_notation_indicator('1.23e4', 'E') == '1.23E4'
+    assert format_scientific_notation_indicator('1.23E4', 'e') == '1.23e4'
+    assert format_scientific_notation_indicator('5.67 x 10⁻³', 'E') == '5.67E-3'
 
     assert count_sig_figs('0.004560') == 4, 'unbound decimal'
     assert count_sig_figs('120.0040') == 7, 'bound decimal'

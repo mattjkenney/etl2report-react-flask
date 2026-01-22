@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import TooltipButton from './TooltipButton';
-import IgnoredIndicator from './IgnoredIndicator';
 import ViewBoundingBoxButton from './ViewBoundingBoxButton';
 import VariableContainer from './VariableContainer';
 
@@ -16,6 +15,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
     const [max, setMax] = useState('');
     const [allowInequalities, setAllowInequalities] = useState(false);
     const [inequalityOperator, setInequalityOperator] = useState('=');
+    const [roundingType, setRoundingType] = useState('none');
     const [sigFigs, setSigFigs] = useState('');
     const [rounding, setRounding] = useState('');
     const [formattedValue, setFormattedValue] = useState('');
@@ -30,25 +30,24 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
         }
 
         const formatNumber = async () => {
-            var isRoundingIgnored = sigFigs && parseFloat(sigFigs) !== 0;
-            var isSigFigsIgnored = rounding && parseFloat(rounding) !== 0;
-            if (isRoundingIgnored === isSigFigsIgnored ) {
+            if (roundingType === 'none') {
                 setFormattedValue(previewValue);
                 return;
             }
             var apiEndpoint = '';
             var data = {value: previewValue};
-            if (isRoundingIgnored && !isSigFigsIgnored) {
+            if (roundingType === 'sigfigs') {
                 apiEndpoint = 'sig-figs';
                 data['sigFigs'] = sigFigs || 0;
             }
-            else {
+            else if (roundingType === 'standard') {
                 apiEndpoint = 'rounding';
                 data['decimalPlaces'] = rounding || 0;
             }
             
             try {
-                const response = await fetch(`http://localhost:5000/api/format/${apiEndpoint}`, {
+                const backendDomain = import.meta.env.VITE_BACKEND_DOMAIN || 'http://localhost:5000';
+                const response = await fetch(`${backendDomain}/api/format/${apiEndpoint}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -71,7 +70,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
         };
 
         formatNumber();
-    }, [previewValue, sigFigs, rounding, type]);
+    }, [previewValue, roundingType, sigFigs, rounding, type]);
 
     const getFormattedPreviewValue = () => {
         if (type === 'number' && allowInequalities && inequalityOperator !== '=') {
@@ -176,34 +175,75 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                         </label>
                                     </div>
                                     <div className="form-field">
-                                        <div className="flex items-center gap-1 mb-1">
-                                            <label className="form-label mb-0">Significant Figures</label>
-                                            <TooltipButton content="The number of digits shown on the report, including both sides of the decimal. Significant Figures cannot be used with Rounding." />
-                                            <IgnoredIndicator show={rounding && parseFloat(rounding) !== 0} />
+                                        <label className="form-label mb-2">Rounding</label>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <label className="flex items-center gap-1 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="roundingType"
+                                                    value="none"
+                                                    checked={roundingType === 'none'}
+                                                    onChange={(e) => setRoundingType(e.target.value)}
+                                                    className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-theme-primary">None</span>
+                                            </label>
+                                            <label className="flex items-center gap-1 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="roundingType"
+                                                    value="standard"
+                                                    checked={roundingType === 'standard'}
+                                                    onChange={(e) => setRoundingType(e.target.value)}
+                                                    className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-theme-primary">Standard</span>
+                                            </label>
+                                            <label className="flex items-center gap-1 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="roundingType"
+                                                    value="sigfigs"
+                                                    checked={roundingType === 'sigfigs'}
+                                                    onChange={(e) => setRoundingType(e.target.value)}
+                                                    className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-theme-primary">Significant Figures</span>
+                                            </label>
                                         </div>
-                                        <input
-                                            type="number"
-                                            placeholder="Enter significant figures"
-                                            value={sigFigs}
-                                            onChange={(e) => setSigFigs(e.target.value)}
-                                            className="form-input"
-                                            min={0}
-                                        />
                                     </div>
-                                    <div className="form-field">
-                                        <div className="flex items-center gap-1 mb-1">
-                                            <label className="form-label mb-0">Rounding</label>
-                                            <TooltipButton content="The number of digits to right of the decimal to round the input. Rounding cannot be used with Significant Figures." />
-                                            <IgnoredIndicator show={sigFigs && parseFloat(sigFigs) !== 0} />
+                                    {roundingType === 'sigfigs' && (
+                                        <div className="form-field">
+                                            <div className="flex items-center gap-1 mb-1">
+                                                <label className="form-label mb-0">Significant Figures</label>
+                                                <TooltipButton content="The number of digits shown on the report, including both sides of the decimal." />
+                                            </div>
+                                            <input
+                                                type="number"
+                                                placeholder="Enter significant figures"
+                                                value={sigFigs}
+                                                onChange={(e) => setSigFigs(e.target.value)}
+                                                className="form-input"
+                                                min={0}
+                                            />
                                         </div>
-                                        <input
-                                            type="number"
-                                            placeholder="Enter rounding"
-                                            value={rounding}
-                                            onChange={(e) => setRounding(e.target.value)}
-                                            className="form-input"
-                                        />
-                                    </div>
+                                    )}
+                                    {roundingType === 'standard' && (
+                                        <div className="form-field">
+                                            <div className="flex items-center gap-1 mb-1">
+                                                <label className="form-label mb-0">Decimal Places</label>
+                                                <TooltipButton content="The number of digits to right of the decimal to round the input." />
+                                            </div>
+                                            <input
+                                                type="number"
+                                                placeholder="Enter rounding"
+                                                value={rounding}
+                                                onChange={(e) => setRounding(e.target.value)}
+                                                className="form-input"
+                                                min={0}
+                                            />
+                                        </div>
+                                    )}
                                 </>
                             )}
                             <div className="mt-4 pt-4 border-t border-theme-primary">
