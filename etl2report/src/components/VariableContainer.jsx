@@ -55,6 +55,12 @@ export default function VariableContainer({
                         onChange={handleNameChange}
                         onFocus={() => setIsNameFocused(true)}
                         onBlur={() => setIsNameFocused(false)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                setIsNameFocused(false);
+                                e.target.blur();
+                            }
+                        }}
                         className={`flex-1 text-base font-semibold bg-transparent text-theme-primary px-0 focus:outline-none ${isNameFocused ? 'italic' : ''}`}
                         style={{ border: 'none', boxShadow: 'none' }}
                     />

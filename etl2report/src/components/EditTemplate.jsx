@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { clearBoundingBoxIds, reorderBoundingBoxIds } from '../store/dash/view';
+import { clearBoundingBoxIds, reorderBoundingBoxIds, addManualInput } from '../store/dash/view';
 import ManualInput from './ManualInput';
 
 export default function EditTemplate({ templateName, onBack }) {
@@ -71,7 +71,12 @@ export default function EditTemplate({ templateName, onBack }) {
                                 {section.id === 'manual' ? (
                                     <div>
                                         <div className="flex items-center justify-between mb-3">
-                                            <p className="font-medium">Selected variables:</p>
+                                            <button
+                                                onClick={() => dispatch(addManualInput())}
+                                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors"
+                                            >
+                                                + Add Manual Input
+                                            </button>
                                             {selectedBoundingBoxIds.length > 0 && (
                                                 <button
                                                     onClick={() => dispatch(clearBoundingBoxIds())}
@@ -92,6 +97,7 @@ export default function EditTemplate({ templateName, onBack }) {
                                                         key={id}
                                                         id={id}
                                                         index={index + 1}
+                                                        templateName={templateName}
                                                         onDragStart={handleDragStart}
                                                         onDragOver={handleDragOver}
                                                         onDrop={handleDrop}

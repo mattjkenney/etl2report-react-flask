@@ -1,37 +1,62 @@
 import { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
+import { initializeInput, updateField, selectInputState } from '../store/dash/manualInput';
 import TooltipButton from './TooltipButton';
 import ViewBoundingBoxButton from './ViewBoundingBoxButton';
 import VariableContainer from './VariableContainer';
 
-export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop, isDragging }) {
+export default function ManualInput({ id, index, templateName, onDragStart, onDragOver, onDrop, isDragging }) {
+    const dispatch = useDispatch();
     const textractBlocks = useSelector((state) => state.pdfViewer.textractBlocks);
-    const [type, setType] = useState('');
-    const [prompt, setPrompt] = useState('');
-    const [helpText, setHelpText] = useState('');
-    const [previewValue, setPreviewValue] = useState('');
-    const [precision, setPrecision] = useState('');
-    const [min, setMin] = useState('');
-    const [max, setMax] = useState('');
-    const [allowInequalities, setAllowInequalities] = useState(false);
-    const [inequalityOperator, setInequalityOperator] = useState('=');
-    const [roundingType, setRoundingType] = useState('none');
-    const [sigFigs, setSigFigs] = useState('');
-    const [rounding, setRounding] = useState('');
-    const [formattedValue, setFormattedValue] = useState('');
+    const inputState = useSelector((state) => selectInputState(state, templateName, id));
+    
+    // Initialize state in Redux cache on mount
+    useEffect(() => {
+        dispatch(initializeInput({ templateId: templateName, inputId: id }));
+    }, [dispatch, templateName, id]);
+
+    // Extract values from Redux state
+    const {
+        name,
+        type,
+        prompt,
+        helpText,
+        previewValue,
+        precision,
+        min,
+        max,
+        allowInequalities,
+        inequalityOperator,
+        roundingType,
+        sigFigs,
+        rounding,
+        formattedValue,
+    } = inputState;
 
     const block = textractBlocks?.find(b => b.Id === id);
+    
+    // Helper function to update fields in Redux
+    const updateInputField = (field, value) => {
+        dispatch(updateField({ templateId: templateName, inputId: id, field, value }));
+    };
+
+    // Initialize name if empty
+    useEffect(() => {
+        if (!name) {
+            updateInputField('name', `Manual input ${index}`);
+        }
+    }, [name, index]);
 
     // Call backend API to format number when previewValue or formatting options change
     useEffect(() => {
         if (type !== 'number' || !previewValue) {
-            setFormattedValue(previewValue);
+            updateInputField('formattedValue', previewValue);
             return;
         }
 
         const formatNumber = async () => {
             if (roundingType === 'none') {
-                setFormattedValue(previewValue);
+                updateInputField('formattedValue', previewValue);
                 return;
             }
             var apiEndpoint = '';
@@ -57,15 +82,15 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
 
                 if (response.ok) {
                     const data = await response.json();
-                    setFormattedValue(data.formatted);
+                    updateInputField('formattedValue', data.formatted);
                 } else {
                     // Fallback to original value if API fails
-                    setFormattedValue(previewValue);
+                    updateInputField('formattedValue', previewValue);
                 }
             } catch (error) {
                 console.error('Error formatting number:', error);
                 // Fallback to original value if API fails
-                setFormattedValue(previewValue);
+                updateInputField('formattedValue', previewValue);
             }
         };
 
@@ -83,7 +108,8 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
         <VariableContainer
             id={id}
             index={index}
-            name={`Manual input ${index}`}
+            name={name || `Manual input ${index}`}
+            onNameChange={(newName) => updateInputField('name', newName)}
             onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDrop={onDrop}
@@ -99,7 +125,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                     type="text"
                                     placeholder="Enter prompt"
                                     value={prompt}
-                                    onChange={(e) => setPrompt(e.target.value)}
+                                    onChange={(e) => updateInputField('prompt', e.target.value)}
                                     className="form-input"
                                 />
                             </div>
@@ -109,7 +135,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                     type="text"
                                     placeholder="Enter help text"
                                     value={helpText}
-                                    onChange={(e) => setHelpText(e.target.value)}
+                                    onChange={(e) => updateInputField('helpText', e.target.value)}
                                     className="form-input"
                                 />
                             </div>
@@ -117,7 +143,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                 <label className="form-label">Type</label>
                                 <select
                                     value={type}
-                                    onChange={(e) => setType(e.target.value)}
+                                    onChange={(e) => updateInputField('type', e.target.value)}
                                     className="form-input"
                                 >
                                     <option value="">Select type</option>
@@ -139,7 +165,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                             type="number"
                                             placeholder="Enter precision"
                                             value={precision}
-                                            onChange={(e) => setPrecision(e.target.value)}
+                                            onChange={(e) => updateInputField('precision', e.target.value)}
                                             className="form-input"
                                         />
                                     </div>
@@ -149,7 +175,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                             type="number"
                                             placeholder="Enter minimum value"
                                             value={min}
-                                            onChange={(e) => setMin(e.target.value)}
+                                            onChange={(e) => updateInputField('min', e.target.value)}
                                             className="form-input"
                                         />
                                     </div>
@@ -159,7 +185,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                             type="number"
                                             placeholder="Enter maximum value"
                                             value={max}
-                                            onChange={(e) => setMax(e.target.value)}
+                                            onChange={(e) => updateInputField('max', e.target.value)}
                                             className="form-input"
                                         />
                                     </div>
@@ -168,7 +194,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                             <input
                                                 type="checkbox"
                                                 checked={allowInequalities}
-                                                onChange={(e) => setAllowInequalities(e.target.checked)}
+                                                onChange={(e) => updateInputField('allowInequalities', e.target.checked)}
                                                 className="form-checkbox h-4 w-4 rounded border-theme-primary text-blue-500 focus:ring-2 focus:ring-blue-500"
                                             />
                                             <span className="form-label mb-0">Allow Inequalities</span>
@@ -183,7 +209,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                                     name="roundingType"
                                                     value="none"
                                                     checked={roundingType === 'none'}
-                                                    onChange={(e) => setRoundingType(e.target.value)}
+                                                    onChange={(e) => updateInputField('roundingType', e.target.value)}
                                                     className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
                                                 />
                                                 <span className="text-sm text-theme-primary">None</span>
@@ -194,7 +220,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                                     name="roundingType"
                                                     value="standard"
                                                     checked={roundingType === 'standard'}
-                                                    onChange={(e) => setRoundingType(e.target.value)}
+                                                    onChange={(e) => updateInputField('roundingType', e.target.value)}
                                                     className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
                                                 />
                                                 <span className="text-sm text-theme-primary">Standard</span>
@@ -205,7 +231,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                                     name="roundingType"
                                                     value="sigfigs"
                                                     checked={roundingType === 'sigfigs'}
-                                                    onChange={(e) => setRoundingType(e.target.value)}
+                                                    onChange={(e) => updateInputField('roundingType', e.target.value)}
                                                     className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
                                                 />
                                                 <span className="text-sm text-theme-primary">Significant Figures</span>
@@ -222,7 +248,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                                 type="number"
                                                 placeholder="Enter significant figures"
                                                 value={sigFigs}
-                                                onChange={(e) => setSigFigs(e.target.value)}
+                                                onChange={(e) => updateInputField('sigFigs', e.target.value)}
                                                 className="form-input"
                                                 min={0}
                                             />
@@ -238,7 +264,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                                 type="number"
                                                 placeholder="Enter rounding"
                                                 value={rounding}
-                                                onChange={(e) => setRounding(e.target.value)}
+                                                onChange={(e) => updateInputField('rounding', e.target.value)}
                                                 className="form-input"
                                                 min={0}
                                             />
@@ -261,7 +287,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                                     name="inequality"
                                                     value="="
                                                     checked={inequalityOperator === '='}
-                                                    onChange={(e) => setInequalityOperator(e.target.value)}
+                                                    onChange={(e) => updateInputField('inequalityOperator', e.target.value)}
                                                     className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
                                                 />
                                                 <span className="text-sm text-theme-primary">=</span>
@@ -272,7 +298,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                                     name="inequality"
                                                     value=">"
                                                     checked={inequalityOperator === '>'}
-                                                    onChange={(e) => setInequalityOperator(e.target.value)}
+                                                    onChange={(e) => updateInputField('inequalityOperator', e.target.value)}
                                                     className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
                                                 />
                                                 <span className="text-sm text-theme-primary">&gt;</span>
@@ -283,7 +309,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                                     name="inequality"
                                                     value="<"
                                                     checked={inequalityOperator === '<'}
-                                                    onChange={(e) => setInequalityOperator(e.target.value)}
+                                                    onChange={(e) => updateInputField('inequalityOperator', e.target.value)}
                                                     className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
                                                 />
                                                 <span className="text-sm text-theme-primary">&lt;</span>
@@ -294,7 +320,7 @@ export default function ManualInput({ id, index, onDragStart, onDragOver, onDrop
                                         type={type || 'text'}
                                         placeholder="Enter value"
                                         value={previewValue}
-                                        onChange={(e) => setPreviewValue(e.target.value)}
+                                        onChange={(e) => updateInputField('previewValue', e.target.value)}
                                         step={type === 'number' && precision ? precision : undefined}
                                         min={type === 'number' && min ? min : undefined}
                                         max={type === 'number' && max ? max : undefined}

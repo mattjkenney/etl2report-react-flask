@@ -37,8 +37,13 @@ const viewSlice = createSlice({
             items.splice(toIndex, 0, removed);
             state.selectedBoundingBoxIds = items;
         },
+        addManualInput: (state) => {
+            // Generate a unique ID for manual inputs without bounding boxes
+            const id = `manual-input-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            state.selectedBoundingBoxIds.push(id);
+        },
     },
 });
 
-export const { addBoundingBoxId, removeBoundingBoxId, clearBoundingBoxIds, setHoveredBlockId, setSelectedBlockType, reorderBoundingBoxIds } = viewSlice.actions;
+export const { addBoundingBoxId, removeBoundingBoxId, clearBoundingBoxIds, setHoveredBlockId, setSelectedBlockType, reorderBoundingBoxIds, addManualInput } = viewSlice.actions;
 export default viewSlice.reducer;
