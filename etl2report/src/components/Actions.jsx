@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { setReportFile } from '../store/dash/actions/newTemplate';
 import { resetPdfViewer, setPdfUrl, setTextractBlocks, setLoading } from '../store/dash/pdfViewer';
 import { setActionsDefaultHeight } from '../store/dash/sizing';
-import { fetchTemplates, fetchTemplatePdf, fetchTemplateTextract } from '../store/dash/templates';
+import { fetchTemplates, fetchTemplatePdf, fetchTemplateTextract, setCurrentTemplate } from '../store/dash/templates';
 import Button from './Button';
 import LoadingSpinner from './LoadingSpinner';
 import NewTemplate from './NewTemplate';
@@ -12,8 +12,7 @@ import EditTemplate from './EditTemplate';
 export default function Actions() {
     const dispatch = useDispatch();
     const { actionsDefaultHeight } = useSelector(state => state.sizing);
-    const { templates, loading, error, loadingPdf } = useSelector(state => state.templates);
-    const [selectedTemplate, setSelectedTemplate] = useState('');
+    const { templates, loading, error, loadingPdf, currentTemplate } = useSelector(state => state.templates);
     const [showNewTemplate, setShowNewTemplate] = useState(false);
     const [showEditTemplate, setShowEditTemplate] = useState(false);
 
@@ -40,7 +39,9 @@ export default function Actions() {
 
     const handleTemplateChange = (e) => {
         const templateName = e.target.value;
-        setSelectedTemplate(templateName);
+        
+        // Update Redux with the current template
+        dispatch(setCurrentTemplate(templateName || null));
         
         // If a template is selected, load its PDF
         if (templateName) {
@@ -63,13 +64,13 @@ export default function Actions() {
     };
     
     const handleEditClick = async () => {
-        if (!selectedTemplate) return;
+        if (!currentTemplate) return;
         
         // Show the EditTemplate component first
         setShowEditTemplate(true);
         
         try {
-            const blocks = await dispatch(fetchTemplateTextract(selectedTemplate));
+            const blocks = await dispatch(fetchTemplateTextract(currentTemplate));
             dispatch(setTextractBlocks(blocks));
             // You might want to show a success message or notification here
         } catch (error) {
@@ -85,14 +86,15 @@ export default function Actions() {
     const handleBackToActions = () => {
         setShowNewTemplate(false);
         setShowEditTemplate(false);
-        setSelectedTemplate('');
+        // Clear the current template in Redux
+        dispatch(setCurrentTemplate(null));
         // Clear the file metadata when going back
         dispatch(setReportFile(null));
         // Clear the PDF viewer
         dispatch(resetPdfViewer());
     };
 
-    const isTemplateSelected = selectedTemplate !== '';
+    const isTemplateSelected = currentTemplate !== '' && currentTemplate !== null;
 
     // If showing edit template form, render it instead of the main actions
     if (showEditTemplate) {
@@ -112,10 +114,7 @@ export default function Actions() {
                         />
                     </div>
                     <div className="space-y-4">
-                        <EditTemplate 
-                            templateName={selectedTemplate}
-                            onBack={handleBackToActions}
-                        />
+                        <EditTemplate onBack={handleBackToActions} />
                     </div>
                 </div>
             </div>
@@ -169,7 +168,7 @@ export default function Actions() {
                         <select
                             id="template-select"
                             name="template"
-                            value={selectedTemplate}
+                            value={currentTemplate || ''}
                             onChange={handleTemplateChange}
                             className="flex-1 px-3 py-2 border border-theme-primary rounded-md bg-theme-secondary text-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent"
                             disabled={loading}

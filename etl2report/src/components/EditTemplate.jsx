@@ -1,14 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { addVariable, removeVariable, reorderVariables, clearCategory, selectSections } from '../store/dash/variableContainers';
-import { initializeItem, updateField, selectItemState } from '../store/dash/variables';
+import { useState } from 'react';
+import { useSelector } from 'react-redux';
+import { selectSections } from '../store/dash/variableContainers';
 import ViewBoundingBoxButton from './ViewBoundingBoxButton';
 import VariableSectionContent from './VariableSectionContent';
 
-export default function EditTemplate({ templateName, onBack }) {
-    const dispatch = useDispatch();
+export default function EditTemplate() {
     const [expandedSection, setExpandedSection] = useState(null);
     const [selectedInputForBinding, setSelectedInputForBinding] = useState('');
+    const templateName = useSelector((state) => state.templates.currentTemplate);
     const sections = useSelector(selectSections);
     const variableContainers = useSelector((state) => state.variableContainers);
     const textractBlocks = useSelector((state) => state.pdfViewer?.textractBlocks);
@@ -75,7 +74,6 @@ export default function EditTemplate({ templateName, onBack }) {
                             <ViewBoundingBoxButton 
                                 block={textractBlocks?.find(b => b.Id === selectedBlockId)} 
                                 id={selectedInputForBinding}
-                                templateName={templateName}
                             />
                         )}
                     </div>
@@ -107,7 +105,6 @@ export default function EditTemplate({ templateName, onBack }) {
                         {expandedSection === section.id && (
                             <VariableSectionContent 
                                 section={section}
-                                templateName={templateName}
                             />
                         )}
                     </div>

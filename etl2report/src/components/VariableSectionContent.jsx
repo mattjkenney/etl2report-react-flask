@@ -5,8 +5,9 @@ import { DragProvider } from '../contexts/DragContext';
 import VariableContainer from './VariableContainer';
 import ManualInputContent from './ManualInputContent';
 
-export default function VariableSectionContent({ section, templateName }) {
+export default function VariableSectionContent({ section }) {
     const dispatch = useDispatch();
+    const templateName = useSelector((state) => state.templates.currentTemplate);
     const inputIds = useSelector((state) => state.variableContainers?.[section.id]?.variableIds || []);
 
     const handleAddInput = () => {
@@ -24,7 +25,7 @@ export default function VariableSectionContent({ section, templateName }) {
     // Render the appropriate input content based on section id
     const renderInputContent = (id, index) => {
         if (section.id === 'manuals') {
-            return <ManualInputContent id={id} index={index} templateName={templateName} />;
+            return <ManualInputContent id={id} index={index} />;
         }
         // Add other section types here as they are implemented
         return null;
@@ -56,7 +57,6 @@ export default function VariableSectionContent({ section, templateName }) {
                             key={id}
                             id={id}
                             index={index + 1}
-                            templateName={templateName}
                             category={section.id}
                         >
                             {renderInputContent(id, index + 1)}

@@ -4,8 +4,9 @@ import { initializeItem, updateField, selectItemState } from '../store/dash/vari
 import { selectPrimaryBlockId } from '../store/dash/boxBindings';
 import TooltipButton from './TooltipButton';
 
-export default function ManualInputContent({ id, index, templateName }) {
+export default function ManualInputContent({ id, index }) {
     const dispatch = useDispatch();
+    const templateName = useSelector((state) => state.templates.currentTemplate);
     const textractBlocks = useSelector((state) => state.pdfViewer.textractBlocks);
     const inputState = useSelector((state) => selectItemState(state, 'manuals', templateName, id));
     const blockId = useSelector((state) => selectPrimaryBlockId(state, id));

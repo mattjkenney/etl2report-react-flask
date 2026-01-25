@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { removeVariable } from '../store/dash/variableContainers';
 import { removeItem, updateField, selectItemState } from '../store/dash/variables';
-import { removeBinding } from '../store/dash/boxBindings';
 import { useDrag } from '../contexts/DragContext';
 import RemoveButton from './RemoveButton';
 
@@ -11,10 +10,10 @@ export default function VariableContainer({
     index, 
     children,
     category = 'manual',
-    templateName = '',
     defaultExpanded = false,
 }) {
     const dispatch = useDispatch();
+    const templateName = useSelector((state) => state.templates.currentTemplate);
     const { handleDragStart, handleDrop, isDragging } = useDrag();
     
     // Fetch name from Redux based on category
@@ -34,15 +33,13 @@ export default function VariableContainer({
         const newName = e.target.value;
         setLocalName(newName);
         // Update Redux based on category
-        if (category === 'manuals') {
-            dispatch(updateField({ sectionId: category, templateId: templateName, itemId: id, field: 'name', value: newName }));
-        }
+        dispatch(updateField({ sectionId: category, templateId: templateName, itemId: id, field: 'name', value: newName }));
     };
 
     const handleRemove = () => {
         dispatch(removeVariable({ category, id }));
-        // Also remove from the data store if it's a manual input
-        if (category === 'manuals' && templateName) {
+        // Also remove from the data store
+        if (templateName) {
             dispatch(removeItem({ sectionId: category, templateId: templateName, itemId: id }));
         }
     };
