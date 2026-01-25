@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { addBoundingBoxId, removeBoundingBoxId } from '../store/dash/view';
+import { setSelectionMode } from '../store/dash/view';
+import { addVariable } from '../store/dash/variableContainers';
+import { initializeInput } from '../store/dash/manualInput';
+import { setBinding } from '../store/dash/boxBindings';
 
 /**
  * BoundingBoxOverlay Component
@@ -18,6 +21,7 @@ export default function BoundingBoxOverlay({ blocks, pageNumber, pageWidth, page
     const [selectedBlock, setSelectedBlock] = useState(null);
     const [hoveredBlock, setHoveredBlock] = useState(null);
     const externalHoveredBlockId = useSelector((state) => state.view.hoveredBlockId);
+    const selectionMode = useSelector((state) => state.view.selectionMode);
 
     if (!show || !blocks || blocks.length === 0 || !pageWidth || !pageHeight) {
         return null;
@@ -95,15 +99,20 @@ export default function BoundingBoxOverlay({ blocks, pageNumber, pageWidth, page
                 }}
                 onClick={(e) => {
                     e.stopPropagation();
-                    const wasSelected = isSelected;
-                    setSelectedBlock(isSelected ? null : block);
                     
-                    // Dispatch to Redux store for EditTemplate to track
-                    if (wasSelected) {
-                        dispatch(removeBoundingBoxId(block.Id));
-                    } else {
-                        dispatch(addBoundingBoxId(block.Id));
+                    // If selection mode is enabled, update the target input's block ID
+                    if (selectionMode?.enabled && selectionMode.targetInputId && selectionMode.templateName) {
+                        // Bind the block to the target input in boxBindings store
+                        dispatch(setBinding({ 
+                            inputId: selectionMode.targetInputId,
+                            blockId: block.Id 
+                        }));
+
+                        return;
                     }
+                    
+                    // Normal selection behavior - don't bind to any inputs, just give box info
+                    setSelectedBlock(block);
                 }}
                 onMouseEnter={() => setHoveredBlock(block)}
                 onMouseLeave={() => setHoveredBlock(null)}
@@ -125,6 +134,13 @@ export default function BoundingBoxOverlay({ blocks, pageNumber, pageWidth, page
             >
                 {filteredBlocks.map(block => renderBoundingBox(block))}
             </div>
+
+            {/* Selection mode indicator */}
+            {selectionMode.enabled && (
+                <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
+                    Click on a bounding box to change the selected block
+                </div>
+            )}
 
             {/* Info panel for selected block */}
             {selectedBlock && (

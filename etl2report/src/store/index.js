@@ -6,6 +6,9 @@ import pdfViewerReducer from './dash/pdfViewer.js'
 import messagesReducer from './messages.js'
 import templatesReducer from './dash/templates.js'
 import viewReducer from './dash/view.js'
+import manualInputReducer from './dash/manualInput.js'
+import variableContainersReducer from './dash/variableContainers.js'
+import boxBindingsReducer from './dash/boxBindings.js'
 
 export const store = configureStore({
   reducer: {
@@ -16,6 +19,9 @@ export const store = configureStore({
     messages: messagesReducer,
     templates: templatesReducer,
     view: viewReducer,
+    manualInput: manualInputReducer,
+    variableContainers: variableContainersReducer,
+    boxBindings: boxBindingsReducer,
   },
 })
 
