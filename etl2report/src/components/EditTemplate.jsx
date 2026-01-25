@@ -1,13 +1,28 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { clearBoundingBoxIds, reorderBoundingBoxIds, addManualInput } from '../store/dash/view';
+import { addVariable, removeVariable, reorderVariables, clearCategory } from '../store/dash/variableContainers';
+import { initializeInput, updateField, selectInputState } from '../store/dash/manualInput';
 import ManualInput from './ManualInput';
+import ViewBoundingBoxButton from './ViewBoundingBoxButton';
 
 export default function EditTemplate({ templateName, onBack }) {
     const dispatch = useDispatch();
     const [expandedSection, setExpandedSection] = useState(null);
     const [draggedIndex, setDraggedIndex] = useState(null);
-    const { selectedBoundingBoxIds } = useSelector((state) => state.view);
+    const [selectedInputForBinding, setSelectedInputForBinding] = useState('');
+    const manualIds = useSelector((state) => state.variableContainers?.manuals || []);
+    const textractBlocks = useSelector((state) => state.pdfViewer?.textractBlocks);
+    const manualInputCache = useSelector((state) => state.manualInput?.cache);
+
+    // Get all manual inputs with their names and block IDs
+    const manualInputsWithNames = (manualIds || []).map((id) => {
+        const inputState = manualInputCache?.[templateName]?.[id] || {};
+        return {
+            id,
+            blockId: inputState.blockId,
+            name: inputState.name || 'Unnamed input'
+        };
+    });
 
     const sections = [
         { id: 'manual', title: 'Manual' },
@@ -33,16 +48,58 @@ export default function EditTemplate({ templateName, onBack }) {
     const handleDrop = (e, dropIndex) => {
         e.preventDefault();
         if (draggedIndex !== null && draggedIndex !== dropIndex) {
-            dispatch(reorderBoundingBoxIds({ fromIndex: draggedIndex, toIndex: dropIndex }));
+            dispatch(reorderVariables({ category: 'manuals', fromIndex: draggedIndex, toIndex: dropIndex }));
         }
         setDraggedIndex(null);
     };
+
+    // Helper to add a new manual input
+    const handleAddManualInput = () => {
+        const id = `manual-input-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        dispatch(addVariable({ category: 'manuals', id }));
+        dispatch(initializeInput({ templateId: templateName, inputId: id }));
+    };
+
+    // Find the selected input's blockId
+    const selectedInputData = manualInputsWithNames.find(inp => inp.id === selectedInputForBinding);
+    const selectedBlockId = selectedInputData?.blockId;
 
     return (
         <div className="space-y-4">
             <h3 className="text-lg font-semibold text-theme-primary">
                 Edit Template: {templateName}
             </h3>
+            
+            {/* Box Binding Section */}
+            {manualIds.length > 0 && (
+                <div className="border border-theme-primary rounded-lg p-4 bg-theme-secondary">
+                    <h4 className="text-md font-semibold text-theme-primary mb-3">Box Binding</h4>
+                    <div className="space-y-3">
+                        <div className="form-field">
+                            <label className="form-label">Select Variable</label>
+                            <select
+                                value={selectedInputForBinding}
+                                onChange={(e) => setSelectedInputForBinding(e.target.value)}
+                                className="form-input"
+                            >
+                                <option value="">-- Select a variable --</option>
+                                {manualInputsWithNames.map((input) => (
+                                    <option key={input.id} value={input.id}>
+                                        {input.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        {selectedInputForBinding && (
+                            <ViewBoundingBoxButton 
+                                block={textractBlocks?.find(b => b.Id === selectedBlockId)} 
+                                id={selectedInputForBinding}
+                                templateName={templateName}
+                            />
+                        )}
+                    </div>
+                </div>
+            )}
             
             {/* Variables Section */}
             <div>
@@ -72,27 +129,27 @@ export default function EditTemplate({ templateName, onBack }) {
                                     <div>
                                         <div className="flex items-center justify-between mb-3">
                                             <button
-                                                onClick={() => dispatch(addManualInput())}
+                                                onClick={handleAddManualInput}
                                                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors"
                                             >
                                                 + Add Manual Input
                                             </button>
-                                            {selectedBoundingBoxIds.length > 0 && (
+                                            {manualIds.length > 0 && (
                                                 <button
-                                                    onClick={() => dispatch(clearBoundingBoxIds())}
+                                                    onClick={() => dispatch(clearCategory({ category: 'manuals' }))}
                                                     className="text-sm text-red-600 hover:underline"
                                                 >
                                                     Clear All
                                                 </button>
                                             )}
                                         </div>
-                                        {selectedBoundingBoxIds.length === 0 ? (
+                                        {manualIds.length === 0 ? (
                                             <p className="text-theme-secondary italic">
                                                 No variables selected. Click on bounding boxes in the PDF viewer to add them.
                                             </p>
                                         ) : (
                                             <div className="space-y-2">
-                                                {selectedBoundingBoxIds.map((id, index) => (
+                                                {manualIds.map((id, index) => (
                                                     <ManualInput 
                                                         key={id}
                                                         id={id}

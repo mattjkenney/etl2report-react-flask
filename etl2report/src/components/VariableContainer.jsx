@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { removeBoundingBoxId } from '../store/dash/view';
+import { removeVariable } from '../store/dash/variableContainers';
+import { removeInput } from '../store/dash/manualInput';
+import { removeBinding } from '../store/dash/boxBindings';
+import RemoveButton from './RemoveButton';
 
 export default function VariableContainer({ 
     id, 
@@ -12,7 +15,9 @@ export default function VariableContainer({
     onDrop, 
     isDragging,
     children,
-    defaultExpanded = false
+    defaultExpanded = false,
+    category = 'manuals', // Add category prop with default
+    templateName = '', // Add templateName prop for cleaning up input data
 }) {
     const dispatch = useDispatch();
     const [localName, setLocalName] = useState(name);
@@ -28,7 +33,11 @@ export default function VariableContainer({
     };
 
     const handleRemove = () => {
-        dispatch(removeBoundingBoxId(id));
+        dispatch(removeVariable({ category, id }));
+        // Also remove from the data store if it's a manual input
+        if (category === 'manuals' && templateName) {
+            dispatch(removeInput({ templateId: templateName, inputId: id }));
+        }
     };
 
     return (
@@ -67,20 +76,7 @@ export default function VariableContainer({
                 </div>
                 {isExpanded && children}
             </div>
-            <button
-                onClick={handleRemove}
-                className="flex-shrink-0 text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
-                title="Remove"
-            >
-                <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
+            <RemoveButton onClick={handleRemove} />
         </div>
     );
 }
