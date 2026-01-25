@@ -1,34 +1,41 @@
-import { useState } from 'react';
-import { useDispatch } from 'react-redux';
+import { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { removeVariable } from '../store/dash/variableContainers';
-import { removeInput } from '../store/dash/manualInput';
+import { removeItem, updateField, selectItemState } from '../store/dash/variables';
 import { removeBinding } from '../store/dash/boxBindings';
+import { useDrag } from '../contexts/DragContext';
 import RemoveButton from './RemoveButton';
 
 export default function VariableContainer({ 
     id, 
     index, 
-    name, 
-    onNameChange,
-    onDragStart, 
-    onDragOver, 
-    onDrop, 
-    isDragging,
     children,
+    category = 'manual',
+    templateName = '',
     defaultExpanded = false,
-    category = 'manuals', // Add category prop with default
-    templateName = '', // Add templateName prop for cleaning up input data
 }) {
     const dispatch = useDispatch();
+    const { handleDragStart, handleDrop, isDragging } = useDrag();
+    
+    // Fetch name from Redux based on category
+    const inputState = useSelector((state) => selectItemState(state, category, templateName, id));
+    const name = inputState?.name || `Variable ${index}`;
+    
     const [localName, setLocalName] = useState(name);
     const [isNameFocused, setIsNameFocused] = useState(false);
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
+    // Sync localName when Redux name changes
+    useEffect(() => {
+        setLocalName(name);
+    }, [name]);
+
     const handleNameChange = (e) => {
         const newName = e.target.value;
         setLocalName(newName);
-        if (onNameChange) {
-            onNameChange(newName);
+        // Update Redux based on category
+        if (category === 'manuals') {
+            dispatch(updateField({ sectionId: category, templateId: templateName, itemId: id, field: 'name', value: newName }));
         }
     };
 
@@ -36,17 +43,32 @@ export default function VariableContainer({
         dispatch(removeVariable({ category, id }));
         // Also remove from the data store if it's a manual input
         if (category === 'manuals' && templateName) {
-            dispatch(removeInput({ templateId: templateName, inputId: id }));
+            dispatch(removeItem({ sectionId: category, templateId: templateName, itemId: id }));
         }
+    };
+
+    const onDragStart = (e) => {
+        handleDragStart(index - 1);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const onDragOver = (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const onDrop = (e) => {
+        e.preventDefault();
+        handleDrop(index - 1);
     };
 
     return (
         <div 
             draggable
-            onDragStart={(e) => onDragStart(e, index - 1)}
-            onDragOver={(e) => onDragOver(e, index - 1)}
-            onDrop={(e) => onDrop(e, index - 1)}
-            className={`bg-theme-secondary p-3 rounded border border-theme-primary hover:border-theme-secondary flex items-start gap-3 transition-colors cursor-move ${isDragging ? 'opacity-50' : ''}`}
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            className={`bg-theme-secondary p-3 rounded border border-theme-primary hover:border-theme-secondary flex items-start gap-3 transition-colors cursor-move ${isDragging(index - 1) ? 'opacity-50' : ''}`}
         >
             <div className="flex-grow space-y-3">
                 <div className="flex items-center gap-2">

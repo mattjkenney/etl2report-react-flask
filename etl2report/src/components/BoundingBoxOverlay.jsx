@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { setSelectionMode } from '../store/dash/view';
 import { addVariable } from '../store/dash/variableContainers';
-import { initializeInput } from '../store/dash/manualInput';
+import { initializeItem } from '../store/dash/variables';
 import { setBinding } from '../store/dash/boxBindings';
 
 /**
