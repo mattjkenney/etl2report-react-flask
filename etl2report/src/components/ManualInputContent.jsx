@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { initializeItem, updateField, selectItemState } from '../store/dash/variables';
 import { selectPrimaryBlockId } from '../store/dash/boxBindings';
 import TooltipButton from './TooltipButton';
+import ManualInputPreview from './ManualInputPreview';
 
 export default function ManualInputContent({ id, index }) {
     const dispatch = useDispatch();
@@ -88,13 +89,6 @@ export default function ManualInputContent({ id, index }) {
 
         formatNumber();
     }, [previewValue, roundingType, sigFigs, rounding, type]);
-
-    const getFormattedPreviewValue = () => {
-        if (type === 'number' && allowInequalities && inequalityOperator !== '=') {
-            return inequalityOperator + formattedValue;
-        }
-        return formattedValue;
-    };
 
     return (
         <div className="space-y-2">
@@ -253,65 +247,7 @@ export default function ManualInputContent({ id, index }) {
             )}
             <div className="mt-4 pt-4 border-t border-theme-primary">
                 <h4 className="text-sm font-semibold text-theme-primary mb-3">Preview</h4>
-                <div className="space-y-2">
-                    <div className="flex items-center gap-1 mb-1">
-                        <label className="form-label mb-0 text-sm">{prompt || 'Prompt'}</label>
-                        {helpText && <TooltipButton content={helpText} />}
-                    </div>
-                    {type === 'number' && allowInequalities && (
-                        <div className="flex items-center gap-3 mb-2">
-                            <label className="flex items-center gap-1 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name={`inequality-${id}`}
-                                    value="="
-                                    checked={inequalityOperator === '='}
-                                    onChange={(e) => updateInputField('inequalityOperator', e.target.value)}
-                                    className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-theme-primary">=</span>
-                            </label>
-                            <label className="flex items-center gap-1 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name={`inequality-${id}`}
-                                    value=">"
-                                    checked={inequalityOperator === '>'}
-                                    onChange={(e) => updateInputField('inequalityOperator', e.target.value)}
-                                    className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-theme-primary">&gt;</span>
-                            </label>
-                            <label className="flex items-center gap-1 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name={`inequality-${id}`}
-                                    value="<"
-                                    checked={inequalityOperator === '<'}
-                                    onChange={(e) => updateInputField('inequalityOperator', e.target.value)}
-                                    className="form-radio h-4 w-4 text-blue-500 focus:ring-2 focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-theme-primary">&lt;</span>
-                            </label>
-                        </div>
-                    )}
-                    <input
-                        type={type || 'text'}
-                        placeholder="Enter value"
-                        value={previewValue}
-                        onChange={(e) => updateInputField('previewValue', e.target.value)}
-                        step={type === 'number' && precision ? precision : undefined}
-                        min={type === 'number' && min ? min : undefined}
-                        max={type === 'number' && max ? max : undefined}
-                        className="w-full px-3 py-2 text-sm border border-theme-primary rounded bg-theme-primary text-theme-primary placeholder-theme-muted focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    {previewValue && (
-                        <div className="mt-2 p-2 bg-theme-tertiary rounded">
-                            <p className="text-xs text-theme-secondary mb-1">Report Display:</p>
-                            <p className="text-sm font-medium text-theme-primary">{getFormattedPreviewValue()}</p>
-                        </div>
-                    )}
-                </div>
+                <ManualInputPreview id={id} />
             </div>
         </div>
     );

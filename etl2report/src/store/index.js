@@ -9,6 +9,7 @@ import viewReducer from './dash/view.js'
 import variablesReducer from './dash/variables.js'
 import variableContainersReducer from './dash/variableContainers.js'
 import boxBindingsReducer from './dash/boxBindings.js'
+import previewValuesReducer from './dash/previewValues.js'
 
 export const store = configureStore({
   reducer: {
@@ -22,6 +23,7 @@ export const store = configureStore({
     variables: variablesReducer,
     variableContainers: variableContainersReducer,
     boxBindings: boxBindingsReducer,
+    previewValues: previewValuesReducer,
   },
 })
 

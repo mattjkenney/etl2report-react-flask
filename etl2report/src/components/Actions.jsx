@@ -8,6 +8,7 @@ import Button from './Button';
 import LoadingSpinner from './LoadingSpinner';
 import NewTemplate from './NewTemplate';
 import EditTemplate from './EditTemplate';
+import CreateReport from './CreateReport';
 
 export default function Actions() {
     const dispatch = useDispatch();
@@ -15,6 +16,7 @@ export default function Actions() {
     const { templates, loading, error, loadingPdf, currentTemplate } = useSelector(state => state.templates);
     const [showNewTemplate, setShowNewTemplate] = useState(false);
     const [showEditTemplate, setShowEditTemplate] = useState(false);
+    const [showCreateReport, setShowCreateReport] = useState(false);
 
     // Fetch templates on component mount
     useEffect(() => {
@@ -83,9 +85,28 @@ export default function Actions() {
         setShowNewTemplate(true);
     };
 
+    const handleCreateReportClick = async () => {
+        if (!currentTemplate) return;
+        
+        // Load template data if not already loaded
+        setShowCreateReport(true);
+        
+        // If textract blocks aren't loaded, load them
+        // (They should already be loaded if user went through Edit, but just in case)
+        try {
+            const blocks = await dispatch(fetchTemplateTextract(currentTemplate));
+            dispatch(setTextractBlocks(blocks));
+        } catch (error) {
+            console.error('Failed to load Textract results:', error);
+            alert('Failed to load template data. Please try again.');
+            setShowCreateReport(false);
+        }
+    };
+
     const handleBackToActions = () => {
         setShowNewTemplate(false);
         setShowEditTemplate(false);
+        setShowCreateReport(false);
         // Clear the current template in Redux
         dispatch(setCurrentTemplate(null));
         // Clear the file metadata when going back
@@ -95,6 +116,31 @@ export default function Actions() {
     };
 
     const isTemplateSelected = currentTemplate !== '' && currentTemplate !== null;
+
+    // If showing create report form, render it instead of the main actions
+    if (showCreateReport) {
+        return (
+            <div 
+                className="bg-theme-secondary border border-theme-primary rounded-lg dashboard-content overflow-y-auto"
+                style={{ maxHeight: `${actionsDefaultHeight}px` }}
+            >
+                <div className="p-4">
+                    <div className="flex items-center mb-4">
+                        <Button
+                            displayText="← Back"
+                            onClick={handleBackToActions}
+                            variant="secondary"
+                            size="small"
+                            type="button"
+                        />
+                    </div>
+                    <div className="space-y-4">
+                        <CreateReport onBack={handleBackToActions} />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // If showing edit template form, render it instead of the main actions
     if (showEditTemplate) {
@@ -224,11 +270,11 @@ export default function Actions() {
                     />
                     <Button
                         displayText="Create Report"
-                        onClick={() => alert('Create Report action triggered')}
+                        onClick={handleCreateReportClick}
                         variant='primary'
                         size='small'
                         className='w-full'
-                        type='submit'
+                        type='button'
                         disabled={!isTemplateSelected}
                     />
                 </div>
