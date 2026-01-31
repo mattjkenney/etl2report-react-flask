@@ -212,10 +212,10 @@ export default function View() {
             </div>
 
             {/* PDF Document Container with Block Type Filter */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Block Type Filter Ribbon */}
                 {textractBlocks && showBoundingBoxes && (
-                    <div className="w-24 bg-theme-secondary border-r border-theme-primary p-2 overflow-y-auto">
+                    <div className="w-24 bg-theme-secondary border-r border-theme-primary p-2 overflow-y-auto flex-shrink-0">
                         <div className="space-y-2">
                             {visibleBlockTypes.map(({ type, label, color }) => (
                                 <button
@@ -236,8 +236,12 @@ export default function View() {
                 )}
                 
                 {/* PDF Viewer */}
-                <div className="flex-1 overflow-auto p-4 bg-gray-100">
-                    <div className="flex justify-center">
+                <div className="flex-1 overflow-auto p-4 bg-gray-100 min-w-0 min-h-0">
+                    <div style={{ 
+                        display: 'inline-block',
+                        minWidth: '100%',
+                        textAlign: 'center'
+                    }}>
                     <Document
                         file={pdfUrl}
                         onLoadStart={onLoadStart}

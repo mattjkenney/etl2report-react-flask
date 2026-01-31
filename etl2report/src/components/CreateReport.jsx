@@ -3,12 +3,14 @@ import { useDispatch, useSelector } from 'react-redux';
 import { selectSections } from '../store/dash/variableContainers';
 import { updateField } from '../store/dash/variables';
 import { selectAllBoxMappings } from '../store/dash/previewValues';
+import { setSelectedReport, fetchReports, fetchReportPdf } from '../store/dash/reports';
+import { setPdfUrl, setTextractBlocks } from '../store/dash/pdfViewer';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import Button from './Button';
 import LoadingSpinner from './LoadingSpinner';
 import ManualInputPreview from './ManualInputPreview';
 
-export default function CreateReport({ onBack }) {
+export default function CreateReport({ onBack, onNavigateToViewReports }) {
     const dispatch = useDispatch();
     const { currentTemplate } = useSelector(state => state.templates);
     const { textractBlocks } = useSelector(state => state.pdfViewer);
@@ -125,7 +127,8 @@ export default function CreateReport({ onBack }) {
             
             // Construct destination key for the generated report
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const outputKey = `users/${userSub}/reports/${templateName}_${timestamp}.pdf`;
+            const filename = `${templateName}_${timestamp}.pdf`;
+            const outputKey = `users/${userSub}/reports/${filename}`;
 
             // Call the replace_pdf_text API
             const backendDomain = import.meta.env.VITE_BACKEND_DOMAIN || 'http://localhost:5000';
@@ -150,13 +153,36 @@ export default function CreateReport({ onBack }) {
                 throw new Error(errorData.error || errorData.message || 'Failed to generate report');
             }
 
+            
             const result = await response.json();
             
             console.log('Report generated successfully:', result);
             setSuccessMessage(`Report generated successfully! File saved to: ${result.destination}`);
             
-            // Optionally go back after successful submission
-            // setTimeout(() => onBack(), 3000);
+            // Navigate to ViewReports and select the newly created report
+            if (onNavigateToViewReports) {
+                // Refresh the reports list first
+                const bucket = import.meta.env.VITE_AWS_S3_BUCKET;
+                await dispatch(fetchReports(bucket, true));
+                
+                // Extract the filename from outputKey for display
+                const fileName = outputKey.split('/').pop();
+                
+                // Fetch the PDF for the newly created report
+                const pdfUrl = await dispatch(fetchReportPdf(outputKey, fileName));
+                
+                // Set the PDF URL in the viewer
+                dispatch(setPdfUrl(pdfUrl));
+                
+                // Clear textract blocks (reports don't need bounding boxes)
+                dispatch(setTextractBlocks(null));
+                
+                // Set the selected report to the newly created one
+                dispatch(setSelectedReport(outputKey));
+                
+                // Navigate to ViewReports
+                onNavigateToViewReports();
+            }
             
         } catch (err) {
             console.error('Error generating report:', err);

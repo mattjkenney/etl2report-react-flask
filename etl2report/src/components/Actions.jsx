@@ -4,11 +4,13 @@ import { setReportFile } from '../store/dash/actions/newTemplate';
 import { resetPdfViewer, setPdfUrl, setTextractBlocks, setLoading } from '../store/dash/pdfViewer';
 import { setActionsDefaultHeight } from '../store/dash/sizing';
 import { fetchTemplates, fetchTemplatePdf, fetchTemplateTextract, setCurrentTemplate } from '../store/dash/templates';
+import { setSelectedReport } from '../store/dash/reports';
 import Button from './Button';
 import LoadingSpinner from './LoadingSpinner';
 import NewTemplate from './NewTemplate';
 import EditTemplate from './EditTemplate';
 import CreateReport from './CreateReport';
+import ViewReports from './ViewReports';
 
 export default function Actions() {
     const dispatch = useDispatch();
@@ -17,6 +19,7 @@ export default function Actions() {
     const [showNewTemplate, setShowNewTemplate] = useState(false);
     const [showEditTemplate, setShowEditTemplate] = useState(false);
     const [showCreateReport, setShowCreateReport] = useState(false);
+    const [showViewReports, setShowViewReports] = useState(false);
 
     // Fetch templates on component mount
     useEffect(() => {
@@ -103,10 +106,22 @@ export default function Actions() {
         }
     };
 
+    const handleViewReportsClick = () => {
+        // Clear any previously selected report
+        dispatch(setSelectedReport(null));
+        setShowViewReports(true);
+    };
+
+    const handleNavigateToViewReports = () => {
+        setShowCreateReport(false);
+        setShowViewReports(true);
+    };
+
     const handleBackToActions = () => {
         setShowNewTemplate(false);
         setShowEditTemplate(false);
         setShowCreateReport(false);
+        setShowViewReports(false);
         // Clear the current template in Redux
         dispatch(setCurrentTemplate(null));
         // Clear the file metadata when going back
@@ -116,6 +131,31 @@ export default function Actions() {
     };
 
     const isTemplateSelected = currentTemplate !== '' && currentTemplate !== null;
+
+    // If showing view reports, render it instead of the main actions
+    if (showViewReports) {
+        return (
+            <div 
+                className="bg-theme-secondary border border-theme-primary rounded-lg dashboard-content overflow-y-auto"
+                style={{ maxHeight: `${actionsDefaultHeight}px` }}
+            >
+                <div className="p-4">
+                    <div className="flex items-center mb-4">
+                        <Button
+                            displayText="← Back"
+                            onClick={handleBackToActions}
+                            variant="secondary"
+                            size="small"
+                            type="button"
+                        />
+                    </div>
+                    <div className="space-y-4">
+                        <ViewReports onBack={handleBackToActions} />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // If showing create report form, render it instead of the main actions
     if (showCreateReport) {
@@ -135,7 +175,10 @@ export default function Actions() {
                         />
                     </div>
                     <div className="space-y-4">
-                        <CreateReport onBack={handleBackToActions} />
+                        <CreateReport 
+                            onBack={handleBackToActions} 
+                            onNavigateToViewReports={handleNavigateToViewReports}
+                        />
                     </div>
                 </div>
             </div>
@@ -276,6 +319,14 @@ export default function Actions() {
                         className='w-full'
                         type='button'
                         disabled={!isTemplateSelected}
+                    />
+                    <Button
+                        displayText="View Reports"
+                        onClick={handleViewReportsClick}
+                        variant='secondary'
+                        size='small'
+                        className='w-full'
+                        type='button'
                     />
                 </div>
             </form>

@@ -5,9 +5,12 @@ PDF Service for handling PDF text replacement operations with S3 integration.
 import os
 import io
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from PyPDF2 import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import fitz  # PyMuPDF
 import logging
 
 logger = logging.getLogger(__name__)
@@ -131,6 +134,120 @@ def upload_pdf_to_s3(bucket: str, key: str, pdf_content: bytes, auth_token: str)
         raise Exception(f"Failed to upload PDF: {str(e)}")
 
 
+def get_font_info_from_bbox(
+    pdf_content: bytes,
+    page_number: int,
+    bbox: Dict[str, float]
+) -> Optional[Dict[str, Any]]:
+    """
+    Extract font information from text within a bounding box.
+    
+    Args:
+        pdf_content: PDF content as bytes
+        page_number: Page number (0-indexed)
+        bbox: Bounding box with x, y, width, height
+        
+    Returns:
+        Dictionary with font_name, font_size, is_bold, is_italic, or None if no text found
+    """
+    try:
+        doc = fitz.open(stream=pdf_content, filetype="pdf")
+        
+        if page_number >= len(doc):
+            logger.warning(f"Page {page_number} out of range")
+            return None
+        
+        page = doc[page_number]
+        
+        # Convert bbox to fitz rect (x0, y0, x1, y1)
+        x0 = bbox.get('x', 0)
+        y0 = bbox.get('y', 0)
+        width = bbox.get('width', 0)
+        height = bbox.get('height', 0)
+        rect = fitz.Rect(x0, y0, x0 + width, y0 + height)
+        
+        # Extract text with formatting info
+        blocks = page.get_text("dict", clip=rect)
+        
+        # Find the first text span in the bounding box
+        for block in blocks.get("blocks", []):
+            if block.get("type") == 0:  # Text block
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        font_info = {
+                            'font_name': span.get('font', 'Helvetica'),
+                            'font_size': span.get('size', 12),
+                            'is_bold': bool(span.get('flags', 0) & 2**4),
+                            'is_italic': bool(span.get('flags', 0) & 2**1),
+                            'color': span.get('color', 0)
+                        }
+                        doc.close()
+                        return font_info
+        
+        doc.close()
+        return None
+    
+    except Exception as e:
+        logger.error(f"Failed to extract font info: {str(e)}")
+        return None
+
+
+def map_font_to_reportlab(font_name: str, is_bold: bool, is_italic: bool) -> str:
+    """
+    Map PDF font names to ReportLab font names.
+    
+    Args:
+        font_name: Original font name from PDF
+        is_bold: Whether font is bold
+        is_italic: Whether font is italic
+        
+    Returns:
+        ReportLab-compatible font name
+    """
+    # Normalize font name
+    font_lower = font_name.lower()
+    
+    # Times family
+    if 'times' in font_lower:
+        if is_bold and is_italic:
+            return 'Times-BoldItalic'
+        elif is_bold:
+            return 'Times-Bold'
+        elif is_italic:
+            return 'Times-Italic'
+        return 'Times-Roman'
+    
+    # Helvetica/Arial family
+    elif 'helvetica' in font_lower or 'arial' in font_lower:
+        if is_bold and is_italic:
+            return 'Helvetica-BoldOblique'
+        elif is_bold:
+            return 'Helvetica-Bold'
+        elif is_italic:
+            return 'Helvetica-Oblique'
+        return 'Helvetica'
+    
+    # Courier family
+    elif 'courier' in font_lower:
+        if is_bold and is_italic:
+            return 'Courier-BoldOblique'
+        elif is_bold:
+            return 'Courier-Bold'
+        elif is_italic:
+            return 'Courier-Oblique'
+        return 'Courier'
+    
+    # Default to Helvetica
+    else:
+        if is_bold and is_italic:
+            return 'Helvetica-BoldOblique'
+        elif is_bold:
+            return 'Helvetica-Bold'
+        elif is_italic:
+            return 'Helvetica-Oblique'
+        return 'Helvetica'
+
+
 def create_overlay_with_text(
     page_width: float,
     page_height: float,
@@ -142,7 +259,7 @@ def create_overlay_with_text(
     Args:
         page_width: Width of the page in points
         page_height: Height of the page in points
-        replacements: List of replacement objects with x, y, width, height, and text
+        replacements: List of replacement objects with x, y, width, height, text, and optional font_info
         
     Returns:
         PDF overlay content as bytes
@@ -156,6 +273,7 @@ def create_overlay_with_text(
         width = replacement.get('width', 100)
         height = replacement.get('height', 20)
         text = replacement.get('text', '')
+        font_info = replacement.get('font_info', {})
         
         # Convert y coordinate (PDF coordinates start from bottom)
         pdf_y = page_height - y - height
@@ -167,13 +285,28 @@ def create_overlay_with_text(
         # Draw new text
         can.setFillColorRGB(0, 0, 0)
         
-        # Calculate appropriate font size based on height
-        font_size = min(height * 0.7, 12)  # Max 12pt font
-        can.setFont("Helvetica", font_size)
+        # Use detected font info if available for both font family and size
+        if font_info and 'font_size' in font_info:
+            font_name = map_font_to_reportlab(
+                font_info.get('font_name', 'Calibri'),
+                font_info.get('is_bold', False),
+                font_info.get('is_italic', False)
+            )
+            # Use the detected font size from the original text
+            font_size = font_info['font_size']
+            logger.info(f"Using detected font size: {font_size}pt (bounding box height: {height})")
+        else:
+            # Fallback to bounding box height if no font detected
+            font_name = 'Helvetica'
+            font_size = height
+            logger.info(f"No font detected, using bounding box height: {font_size}pt")
         
-        # Position text in the middle of the bounding box
-        text_y = pdf_y + (height - font_size) / 2
-        can.drawString(x + 2, text_y, text)
+        can.setFont(font_name, font_size)
+        
+        # Position text at the baseline (aligned with bottom-left of text, not bounding box)
+        # In PDF coordinates, text is drawn from its baseline, so we position it at pdf_y
+        text_y = pdf_y
+        can.drawString(x, text_y, text)
     
     can.save()
     packet.seek(0)
@@ -183,7 +316,8 @@ def create_overlay_with_text(
 def replace_text_in_pdf(
     pdf_content: bytes,
     replacements: List[Dict[str, Any]],
-    page_number: int = 0
+    page_number: int = 0,
+    detect_fonts: bool = True
 ) -> bytes:
     """
     Replace text at specified bounding boxes in a PDF.
@@ -192,6 +326,7 @@ def replace_text_in_pdf(
         pdf_content: Original PDF content as bytes
         replacements: List of replacement objects with x, y, width, height, and text
         page_number: Page number to apply replacements (0-indexed)
+        detect_fonts: Whether to detect and match original fonts (default True)
         
     Returns:
         Modified PDF content as bytes
@@ -210,6 +345,21 @@ def replace_text_in_pdf(
         # Get page dimensions
         page_width = float(page.mediabox.width)
         page_height = float(page.mediabox.height)
+        
+        # Detect fonts if requested and not already provided
+        if detect_fonts:
+            for replacement in replacements:
+                if 'font_info' not in replacement:
+                    bbox = {
+                        'x': replacement.get('x', 0),
+                        'y': replacement.get('y', 0),
+                        'width': replacement.get('width', 100),
+                        'height': replacement.get('height', 20)
+                    }
+                    font_info = get_font_info_from_bbox(pdf_content, page_number, bbox)
+                    if font_info:
+                        replacement['font_info'] = font_info
+                        logger.info(f"Detected font: {font_info['font_name']} ({font_info['font_size']}pt)")
         
         # Create overlay with replacement text
         overlay_content = create_overlay_with_text(page_width, page_height, replacements)

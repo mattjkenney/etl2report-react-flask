@@ -422,6 +422,15 @@ button:focus:not(:focus-visible) {
   overflow-x: hidden;
 }
 
+/* Min width and height classes for flex container constraints */
+.min-w-0 {
+  min-width: 0;
+}
+
+.min-h-0 {
+  min-height: 0;
+}
+
 /* BoundingBox Overlay Styles */
 .bbox-overlay-container {
   position: absolute;

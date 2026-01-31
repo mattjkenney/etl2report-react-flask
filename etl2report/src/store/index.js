@@ -5,6 +5,7 @@ import newTemplateReducer from './dash/actions/newTemplate.js'
 import pdfViewerReducer from './dash/pdfViewer.js'
 import messagesReducer from './messages.js'
 import templatesReducer from './dash/templates.js'
+import reportsReducer from './dash/reports.js'
 import viewReducer from './dash/view.js'
 import variablesReducer from './dash/variables.js'
 import variableContainersReducer from './dash/variableContainers.js'
@@ -19,6 +20,7 @@ export const store = configureStore({
     pdfViewer: pdfViewerReducer,
     messages: messagesReducer,
     templates: templatesReducer,
+    reports: reportsReducer,
     view: viewReducer,
     variables: variablesReducer,
     variableContainers: variableContainersReducer,
