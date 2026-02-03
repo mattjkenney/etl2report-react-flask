@@ -4,7 +4,7 @@ import { setReportFile, updateFormField } from '../store/dash/actions/newTemplat
 import { setPdfUrl, resetPdfViewer, setLoading, setTextractBlocks } from '../store/dash/pdfViewer';
 import { fetchTextractStart, fetchTextractSuccess, fetchTextractFailure, addTemplate } from '../store/dash/templates';
 import { addMessage } from '../store/messages';
-import { uploadFile, startTextractAnalysis, pollTextractResults } from '../utils/aws-api';
+import { uploadFile, startTextractAnalysis, pollTextractResults, convertPdfToHtml } from '../utils/aws-api';
 import Button from './Button';
 
 export default function NewTemplate() {
@@ -88,7 +88,7 @@ export default function NewTemplate() {
         // Basic validation for required field
         if (!formData.reportFile || !actualFile) {
             dispatch(addMessage({
-                id: Date.now(),
+                id: `${Date.now()}-validation`,
                 message: 'Please select a report file.',
                 isError: true
             }));
@@ -107,7 +107,10 @@ export default function NewTemplate() {
             if (!bucketName) {
                 throw new Error('S3 bucket name is not configured. Please check your environment variables.');
             }
-            const uploadResponse = await uploadFile(actualFile, bucketName, formData.templateName, formData.description);
+            // Construct the full S3 key path for the PDF
+            const templateNameClean = formData.templateName.replace(/\.pdf$/i, '');
+            const pdfKey = `templates/${templateNameClean}/${formData.templateName}`;
+            const uploadResponse = await uploadFile(actualFile, bucketName, pdfKey, formData.description);
 
             // Start Textract analysis on the uploaded file
             const outputBucket = bucketName; // Use the same bucket for Textract output
@@ -119,7 +122,7 @@ export default function NewTemplate() {
             );
 
             dispatch(addMessage({
-                id: Date.now(),
+                id: `${Date.now()}-textract-start`,
                 message: `Textract analysis started (Job ID: ${textractResponse.jobId}). Processing document...`,
                 isError: false
             }));
@@ -146,8 +149,42 @@ export default function NewTemplate() {
 
             // Show success message with results
             dispatch(addMessage({
-                id: Date.now(),
+                id: `${Date.now()}-textract-success`,
                 message: `Template created successfully! Textract analysis complete. Extracted ${textractResults.totalBlocks} blocks from document.`,
+                isError: false
+            }));
+
+            // Convert PDF to HTML template (pass S3 location for font detection)
+            dispatch(addMessage({
+                id: `${Date.now()}-html-start`,
+                message: 'Converting PDF layout to HTML template with font detection...',
+                isError: false
+            }));
+
+            const htmlResult = await convertPdfToHtml(
+                formData.templateName.replace(/\.pdf$/i, ''),
+                textractResults.blocks,
+                612,  // page width
+                792,  // page height
+                bucketName,  // PDF S3 bucket for font detection
+                pdfKey  // PDF S3 key for font detection
+            );
+
+            // Upload HTML to S3
+            const htmlBlob = new Blob([htmlResult.html], { type: 'text/html' });
+            const htmlFileName = `${templateNameClean}.html`;
+            const htmlFile = new File([htmlBlob], htmlFileName, { type: 'text/html' });
+            const htmlKey = `templates/${templateNameClean}/${htmlFileName}`;
+            
+            await uploadFile(htmlFile, bucketName, htmlKey, 'HTML template generated from PDF');
+
+            const fontDetectionMsg = htmlResult.fontDetectionEnabled 
+                ? ' Font styles accurately detected from PDF.' 
+                : '';
+            
+            dispatch(addMessage({
+                id: `${Date.now()}-html-success`,
+                message: `HTML template created with ${htmlResult.blockCount} text blocks and uploaded to S3.${fontDetectionMsg}`,
                 isError: false
             }));
             
@@ -178,7 +215,7 @@ export default function NewTemplate() {
             }
             
             dispatch(addMessage({
-                id: Date.now(),
+                id: `${Date.now()}-error`,
                 message: errorMessage,
                 isError: true
             }));

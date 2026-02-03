@@ -12,6 +12,7 @@ from utils.number_formatting import (
     format_with_rounding,
 )
 from utils.pdf_service import process_pdf_replacement
+from utils.html_generator import generate_html_from_textract
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -192,6 +193,106 @@ def replace_pdf_text():
             'success': False,
             'error': str(e),
             'message': 'Failed to process PDF text replacement'
+        }), 500
+
+
+@app.route('/api/pdf/convert-to-html', methods=['POST'])
+def convert_pdf_to_html():
+    """
+    Convert PDF layout to HTML template using Textract blocks.
+    
+    Request body:
+    {
+        "template_name": "My Template",
+        "textract_blocks": [...],  // Array of Textract block objects
+        "page_width": 612,  // Optional, defaults to US Letter width
+        "page_height": 792,  // Optional, defaults to US Letter height
+        "pdf_s3_bucket": "bucket-name",  // Optional, for font detection
+        "pdf_s3_key": "path/to/file.pdf"  // Optional, for font detection
+    }
+    
+    Headers:
+        Authorization: Bearer <JWT token>
+    
+    Returns:
+        {
+            "success": true,
+            "html": "<html>...</html>",
+            "template_name": "My Template",
+            "block_count": 123,
+            "font_detection_enabled": true
+        }
+    """
+    try:
+        # Extract and validate auth token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Missing or invalid Authorization header'}), 401
+        
+        data = request.get_json()
+        
+        # Extract required parameters
+        template_name = data.get('template_name')
+        textract_blocks = data.get('textract_blocks', [])
+        
+        # Validate required fields
+        if not template_name:
+            return jsonify({'error': 'Missing required field: template_name'}), 400
+        
+        if not isinstance(textract_blocks, list):
+            return jsonify({'error': 'textract_blocks must be a list'}), 400
+        
+        # Extract optional parameters
+        page_width = data.get('page_width', 612)
+        page_height = data.get('page_height', 792)
+        pdf_s3_bucket = data.get('pdf_s3_bucket')
+        pdf_s3_key = data.get('pdf_s3_key')
+        
+        # Download PDF for font detection if S3 location provided
+        pdf_content = None
+        font_detection_enabled = False
+        
+        if pdf_s3_bucket and pdf_s3_key:
+            try:
+                from utils.pdf_service import download_pdf_from_s3
+                auth_token = auth_header.replace('Bearer ', '')
+                pdf_content = download_pdf_from_s3(pdf_s3_bucket, pdf_s3_key, auth_token)
+                font_detection_enabled = True
+                logger.info(f"PDF downloaded for font detection: {pdf_s3_bucket}/{pdf_s3_key}")
+            except Exception as e:
+                logger.warning(f"Failed to download PDF for font detection: {str(e)}")
+                # Continue without font detection
+        
+        # Generate HTML from Textract blocks
+        html_content = generate_html_from_textract(
+            textract_blocks=textract_blocks,
+            template_name=template_name,
+            page_width=page_width,
+            page_height=page_height,
+            pdf_content=pdf_content
+        )
+        
+        # Count text blocks in generated HTML
+        line_blocks = [b for b in textract_blocks if b.get('BlockType') == 'LINE']
+        
+        return jsonify({
+            'success': True,
+            'html': html_content,
+            'template_name': template_name,
+            'block_count': len(line_blocks),
+            'page_dimensions': {
+                'width': page_width,
+                'height': page_height
+            },
+            'font_detection_enabled': font_detection_enabled
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error in convert_pdf_to_html: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'message': 'Failed to convert PDF to HTML template'
         }), 500
 
 
