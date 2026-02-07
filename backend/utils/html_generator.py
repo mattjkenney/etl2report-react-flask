@@ -5,15 +5,94 @@ This module converts PDF Textract analysis results into structured HTML template
 that can be manipulated and later rendered back to PDF using Playwright.
 
 LAYOUT_FIGURE blocks are rendered as bordered placeholders. Text blocks that fall
-within figure boundaries are ignored. The application will replace figure placeholders
+within figure boundaries are ignored. Layout blocks such as `LAYOUT_TEXT` are
+rendered as container `div`s nested inside their parent `PAGE` container, and
+child `LINE` blocks for a `LAYOUT_TEXT` are rendered as positioned elements
+inside that layout container. The application will replace figure placeholders
 with actual images or graphs at runtime.
 """
 
 import logging
 import math
+import re
 from typing import List, Dict, Any, Optional
+from backend.utils.text_width import measure_text_width
 
 logger = logging.getLogger(__name__)
+
+
+def _calculate_font_size(height_px: float) -> float:
+    """
+    Calculate font-size by rounding to nearest even whole number.
+    If result is 0, return 1px.
+    """
+    if height_px <= 0:
+        return 1.0
+    # Round to nearest even number
+    rounded = round(height_px / 2) * 2
+    return max(1.0, float(rounded))
+
+
+def _render_line_with_spaces(text: str, word_child_ids: List[str], words_by_id: Dict[str, Any]) -> str:
+    """
+    Render LINE text preserving whitespace by wrapping each space in a span.
+    Also matches words with WORD blocks and adds data-block-id attributes.
+    
+    Args:
+        text: The LINE text content
+        word_child_ids: List of WORD block IDs that are children of this LINE
+        words_by_id: Dictionary mapping WORD block IDs to WORD blocks
+    
+    Returns:
+        HTML string with words and spaces wrapped in spans
+    """
+    # Split text into words and spaces (preserving all whitespace)
+    # This regex splits on spaces but keeps them as separate tokens
+    tokens = re.split(r'( +)', text)
+    
+    html_parts = []
+    word_idx = 0
+    
+    for token in tokens:
+        if not token:  # Skip empty strings
+            continue
+            
+        # Escape HTML entities
+        escaped_token = (
+            token.replace('&', '&amp;')
+                 .replace('<', '&lt;')
+                 .replace('>', '&gt;')
+                 .replace('"', '&quot;')
+                 .replace("'", '&#39;')
+        )
+        
+        if token.strip():  # It's a word (not just whitespace)
+            span_data_id = ''
+            # Try to match with WORD block
+            if word_idx < len(word_child_ids):
+                word_block = words_by_id.get(word_child_ids[word_idx])
+                if word_block and word_block.get('Text', '') == token:
+                    span_data_id = f' data-block-id="{word_block.get("Id", "")}"'
+                    word_idx += 1
+                else:
+                    # Try to find matching WORD block in remaining children
+                    found = False
+                    for look_ahead in range(word_idx + 1, len(word_child_ids)):
+                        word_block = words_by_id.get(word_child_ids[look_ahead])
+                        if word_block and word_block.get('Text', '') == token:
+                            span_data_id = f' data-block-id="{word_block.get("Id", "")}"'
+                            word_idx = look_ahead + 1
+                            found = True
+                            break
+                    if not found:
+                        word_idx += 1
+            html_parts.append(f'<span{span_data_id}>{escaped_token}</span>')
+        else:  # It's whitespace (one or more spaces)
+            # Wrap each individual space character in a span
+            for char in token:
+                html_parts.append('<span> </span>')
+    
+    return ''.join(html_parts)
 
 
 def generate_html_from_textract(
@@ -23,6 +102,17 @@ def generate_html_from_textract(
     page_height: float = 792,   # 11 inches at 72 DPI
     pdf_content: Optional[bytes] = None  # Optional PDF content for font detection
 ) -> str:
+    # Map PDF font names to CSS font-family
+    PDF_TO_CSS_FONT_MAP = {
+        'Times-Roman': 'Times New Roman, Times, serif',
+        'TimesNewRomanPSMT': 'Times New Roman, Times, serif',
+        'Helvetica': 'Arial, Helvetica, sans-serif',
+        'ArialMT': 'Arial, Helvetica, sans-serif',
+        'Courier': 'Courier New, Courier, monospace',
+        'CourierNewPSMT': 'Courier New, Courier, monospace',
+        'Symbol': 'Symbol, serif',
+        'ZapfDingbats': 'Zapf Dingbats, serif',
+    }
     """
     Generate an HTML template from Textract blocks.
     
@@ -36,10 +126,10 @@ def generate_html_from_textract(
     Returns:
         HTML string with absolute positioned elements matching PDF layout
     """
-    # Filter for LAYOUT_FIGURE blocks (images/graphs to render as placeholders)
+    # Filter for LAYOUT_FIGURE and LAYOUT_TABLE blocks (to render as placeholders)
     figure_blocks = [
         block for block in textract_blocks 
-        if block.get('BlockType') == 'LAYOUT_FIGURE'
+        if block.get('BlockType') in ('LAYOUT_FIGURE', 'LAYOUT_TABLE')
     ]
     
     # Filter for LINE blocks (contain text with accurate positioning)
@@ -48,8 +138,14 @@ def generate_html_from_textract(
         if block.get('BlockType') == 'LINE' and block.get('Text')
     ]
     
-    if not line_blocks and not figure_blocks:
-        logger.warning("No LINE or LAYOUT_FIGURE blocks found in Textract data")
+    # Filter for WORD blocks (individual words within lines)
+    word_blocks = [
+        block for block in textract_blocks 
+        if block.get('BlockType') == 'WORD' and block.get('Text')
+    ]
+    
+    if not line_blocks and not figure_blocks and not word_blocks:
+        logger.warning("No LINE, WORD, or LAYOUT_FIGURE/LAYOUT_TABLE blocks found in Textract data")
         return _generate_empty_template(template_name, page_width, page_height)
     
     logger.info(f"Found {len(figure_blocks)} figure blocks and {len(line_blocks)} line blocks")
@@ -92,34 +188,124 @@ def generate_html_from_textract(
         if bbox:
             figures_by_page.append((page_num, bbox))
     
-    # Group blocks by page number
-    pages_dict = {}
-    for block in line_blocks:
-        page_num = block.get('Page', 1)
-        geometry = block.get('Geometry', {})
-        bbox = geometry.get('BoundingBox', {})
-        
-        # Skip text blocks that are inside figure blocks
-        if bbox and is_inside_figure(bbox, page_num, figures_by_page):
-            logger.debug(f"Skipping text block inside figure: '{block.get('Text', '')[:30]}...'")
-            continue
-            
-        if page_num not in pages_dict:
-            pages_dict[page_num] = {'lines': [], 'figures': []}
-        pages_dict[page_num]['lines'].append(block)
+    # Build a map of blocks by id for fast lookup
+    blocks_by_id = {block.get('Id'): block for block in textract_blocks if block.get('Id')}
     
-    # Add figures to their respective pages
-    for block in figure_blocks:
-        page_num = block.get('Page', 1)
-        if page_num not in pages_dict:
-            pages_dict[page_num] = {'lines': [], 'figures': []}
-        pages_dict[page_num]['figures'].append(block)
+    # Build a map of words by id for fast lookup
+    words_by_id = {block.get('Id'): block for block in word_blocks if block.get('Id')}
+    
+    # Build a set of WORD IDs that are children of LINE blocks
+    line_child_word_ids = set()
+    for line_block in line_blocks:
+        for rel in line_block.get('Relationships', []) or []:
+            if rel.get('Type') == 'CHILD':
+                line_child_word_ids.update(rel.get('Ids', []))
+
+    # Identify LAYOUT blocks (LAYOUT_TEXT, LAYOUT_FIGURE, LAYOUT_TABLE) and record their child LINE ids
+    layout_blocks_by_id = {}
+    for block in textract_blocks:
+        if block.get('BlockType') in ('LAYOUT_TEXT', 'LAYOUT_FIGURE', 'LAYOUT_TABLE'):
+            child_ids = []
+            for rel in block.get('Relationships', []) or []:
+                if rel.get('Type') == 'CHILD':
+                    child_ids.extend(rel.get('Ids', []))
+            layout_blocks_by_id[block.get('Id')] = {'block': block, 'child_ids': child_ids}
+
+    # Group pages using PAGE blocks when present; otherwise fall back to line page numbers
+    pages = {}
+    page_blocks = [b for b in textract_blocks if b.get('BlockType') == 'PAGE']
+
+    if page_blocks:
+        for pblock in page_blocks:
+            page_num = pblock.get('Page', 1)
+            pages[page_num] = {'page_block': pblock, 'layout_blocks': [], 'loose_lines': [], 'figures': [], 'loose_words': []}
+
+        # Attach layout blocks to their page
+        for lb in layout_blocks_by_id.values():
+            block = lb['block']
+            page_num = block.get('Page', 1)
+            if page_num not in pages:
+                pages[page_num] = {'page_block': None, 'layout_blocks': [], 'loose_lines': [], 'figures': [], 'loose_words': []}
+            pages[page_num]['layout_blocks'].append(block)
+
+        # Attach figures to pages (if any)
+        for fig in figure_blocks:
+            page_num = fig.get('Page', 1)
+            if page_num not in pages:
+                pages[page_num] = {'page_block': None, 'layout_blocks': [], 'loose_lines': [], 'figures': [], 'loose_words': []}
+            pages[page_num]['figures'].append(fig)
+
+        # Find line ids assigned to layouts so we don't duplicate rendering
+        assigned_line_ids = set()
+        for lb in layout_blocks_by_id.values():
+            for cid in lb['child_ids']:
+                assigned_line_ids.add(cid)
+
+        # Add LINE blocks not assigned to layout blocks as loose lines
+        for block in line_blocks:
+            if block.get('Id') in assigned_line_ids:
+                continue
+            page_num = block.get('Page', 1)
+            geometry = block.get('Geometry', {})
+            bbox = geometry.get('BoundingBox', {})
+            # Skip text blocks that are inside figure blocks
+            if bbox and is_inside_figure(bbox, page_num, figures_by_page):
+                logger.debug(f"Skipping text block inside figure: '{block.get('Text', '')[:30]}...'")
+                continue
+            if page_num not in pages:
+                pages[page_num] = {'page_block': None, 'layout_blocks': [], 'loose_lines': [], 'figures': [], 'loose_words': []}
+            pages[page_num]['loose_lines'].append(block)
+        
+        # Add standalone WORD blocks (not children of LINE blocks)
+        for word in word_blocks:
+            if word.get('Id') in line_child_word_ids:
+                continue
+            page_num = word.get('Page', 1)
+            geometry = word.get('Geometry', {})
+            bbox = geometry.get('BoundingBox', {})
+            if bbox and is_inside_figure(bbox, page_num, figures_by_page):
+                logger.debug(f"Skipping standalone word inside figure: '{word.get('Text', '')[:30]}...'")
+                continue
+            if page_num not in pages:
+                pages[page_num] = {'page_block': None, 'layout_blocks': [], 'loose_lines': [], 'figures': [], 'loose_words': []}
+            pages[page_num]['loose_words'].append(word)
+
+    else:
+        for block in line_blocks:
+            page_num = block.get('Page', 1)
+            geometry = block.get('Geometry', {})
+            bbox = geometry.get('BoundingBox', {})
+            if bbox and is_inside_figure(bbox, page_num, figures_by_page):
+                logger.debug(f"Skipping text block inside figure: '{block.get('Text', '')[:30]}...'")
+                continue
+            if page_num not in pages:
+                pages[page_num] = {'page_block': None, 'layout_blocks': [], 'loose_lines': [], 'figures': [], 'loose_words': []}
+            pages[page_num]['loose_lines'].append(block)
+        for block in figure_blocks:
+            page_num = block.get('Page', 1)
+            if page_num not in pages:
+                pages[page_num] = {'page_block': None, 'layout_blocks': [], 'loose_lines': [], 'figures': [], 'loose_words': []}
+            pages[page_num]['figures'].append(block)
+        # Add standalone WORD blocks
+        for word in word_blocks:
+            if word.get('Id') in line_child_word_ids:
+                continue
+            page_num = word.get('Page', 1)
+            geometry = word.get('Geometry', {})
+            bbox = geometry.get('BoundingBox', {})
+            if bbox and is_inside_figure(bbox, page_num, figures_by_page):
+                logger.debug(f"Skipping standalone word inside figure: '{word.get('Text', '')[:30]}...'")
+                continue
+            if page_num not in pages:
+                pages[page_num] = {'page_block': None, 'layout_blocks': [], 'loose_lines': [], 'figures': [], 'loose_words': []}
+            pages[page_num]['loose_words'].append(word)
     
     # Sort pages by page number
-    sorted_pages = sorted(pages_dict.items())
+    sorted_pages = sorted(pages.items())
     num_pages = len(sorted_pages)
-    
-    total_lines = sum(len(page_data['lines']) for _, page_data in sorted_pages)
+
+    total_lines = sum(len(page_data['loose_lines']) for _, page_data in sorted_pages)
+    total_lines += sum(len(lb.get('child_ids') or []) for lb in layout_blocks_by_id.values())
     total_figures = sum(len(page_data['figures']) for _, page_data in sorted_pages)
     logger.info(f"Processing {num_pages} pages with {total_lines} line blocks and {total_figures} figure placeholders")
     
@@ -128,177 +314,118 @@ def generate_html_from_textract(
     
     for page_num, page_data in sorted_pages:
         html_elements = []
-        
-        # First, render figure placeholders
-        for fig_idx, block in enumerate(page_data['figures']):
-            geometry = block.get('Geometry', {})
-            bbox = geometry.get('BoundingBox', {})
-            
-            if not bbox:
+
+        # Render layout blocks (nested containers)
+        for lidx, layout_block in enumerate(page_data.get('layout_blocks', [])):
+            ltype = layout_block.get('BlockType')
+            geometry = layout_block.get('Geometry', {})
+            lbbox = geometry.get('BoundingBox', {})
+            if not lbbox:
+                continue
+            left = lbbox.get('Left', 0) * page_width
+            top = lbbox.get('Top', 0) * page_height
+            width = lbbox.get('Width', 0) * page_width
+            height = lbbox.get('Height', 0) * page_height
+
+            container_id = f"page{page_num}-{ltype.lower()}-{lidx}"
+
+            if ltype == 'LAYOUT_FIGURE':
+                html_elements.append(f'''
+        <div id="{container_id}" class="layout-figure" style="position: absolute; left: {left:.2f}px; top: {top:.2f}px; width: {width:.2f}px; height: {height:.2f}px; border: 2px dashed #999; background: #f5f5f5; display:flex; align-items:center; justify-content:center;" data-block-id="{layout_block.get('Id','')}" data-page="{page_num}">
+            <span>FIGURE</span>
+        </div>''')
                 continue
             
-            # Convert normalized coordinates to absolute pixels
+            if ltype == 'LAYOUT_TABLE':
+                html_elements.append(f'''
+        <div id="{container_id}" class="layout-table" style="position: absolute; left: {left:.2f}px; top: {top:.2f}px; width: {width:.2f}px; height: {height:.2f}px; border: 2px dashed #999; background: #f5f5f5; display:flex; align-items:center; justify-content:center;" data-block-id="{layout_block.get('Id','')}" data-page="{page_num}">
+            <span>TABLE</span>
+        </div>''')
+                continue
+
+            # LAYOUT_TEXT: render child LINEs inside the container
+            child_ids = layout_blocks_by_id.get(layout_block.get('Id'), {}).get('child_ids', [])
+            child_html = []
+            for idx, cid in enumerate(child_ids):
+                child_block = blocks_by_id.get(cid)
+                if not child_block or child_block.get('BlockType') != 'LINE':
+                    continue
+                geometry = child_block.get('Geometry', {})
+                bbox = geometry.get('BoundingBox', {})
+                if not bbox:
+                    continue
+                if is_inside_figure(bbox, page_num, figures_by_page):
+                    logger.debug(f"Skipping text block inside figure from layout: '{child_block.get('Text', '')[:30]}...'")
+                    continue
+
+                l_left = bbox.get('Left', 0) * page_width
+                l_top = bbox.get('Top', 0) * page_height
+                l_width = bbox.get('Width', 0) * page_width
+                l_height = bbox.get('Height', 0) * page_height
+
+                rel_left = l_left - left
+                rel_top = l_top - top
+
+                # Check if this LINE block has WORD children
+                word_child_ids = []
+                for rel in child_block.get('Relationships', []) or []:
+                    if rel.get('Type') == 'CHILD':
+                        word_child_ids.extend(rel.get('Ids', []))
+                
+                # Render each word in the LINE as a span, with data-block-id if a matching WORD block exists
+                text = child_block.get('Text', '')
+                font_size = _calculate_font_size(l_height)
+                font_weight = 'normal'
+                # Get WORD children in order
+                word_child_ids = []
+                for rel in child_block.get('Relationships', []) or []:
+                    if rel.get('Type') == 'CHILD':
+                        word_child_ids.extend(rel.get('Ids', []))
+                
+                # Render line with preserved whitespace
+                line_html = _render_line_with_spaces(text, word_child_ids, words_by_id)
+                child_html.append(f'''
+            <div class="text-block" style="position: absolute; left: {rel_left:.2f}px; top: {rel_top:.2f}px; width: {l_width:.2f}px; height: {l_height:.2f}px; font-size: {font_size:.2f}px; line-height: {l_height:.2f}px; font-weight: {font_weight}; font-family: 'Times New Roman', Times, serif; white-space: nowrap;" data-block-id="{child_block.get('Id','')}" data-page="{page_num}">{line_html}</div>''')
+
+            html_elements.append(f'''
+        <div id="{container_id}" class="layout-text" style="position: absolute; left: {left:.2f}px; top: {top:.2f}px; width: {width:.2f}px; height: {height:.2f}px;" data-block-id="{layout_block.get('Id','')}" data-page="{page_num}">
+            {''.join(child_html)}
+        </div>''')
+
+        # Then render figures that were not layout children
+        for fig_idx, block in enumerate(page_data.get('figures', [])):
+            geometry = block.get('Geometry', {})
+            bbox = geometry.get('BoundingBox', {})
+            if not bbox:
+                continue
             left = bbox.get('Left', 0) * page_width
             top = bbox.get('Top', 0) * page_height
             width = bbox.get('Width', 0) * page_width
             height = bbox.get('Height', 0) * page_height
-            
             element_id = f"page{page_num}-figure-{fig_idx}"
-            
-            # Create figure placeholder as a bordered rectangle
+            block_type = block.get('BlockType', 'LAYOUT_FIGURE')
+            placeholder_text = 'TABLE' if block_type == 'LAYOUT_TABLE' else 'FIGURE'
             html_elements.append(f'''
-        <div id="{element_id}" class="figure-placeholder" style="
-            position: absolute;
-            left: {left:.2f}px;
-            top: {top:.2f}px;
-            width: {width:.2f}px;
-            height: {height:.2f}px;
-            border: 2px dashed #999;
-            background: #f5f5f5;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #666;
-            font-size: 12px;
-        " data-block-id="{block.get('Id', '')}" data-page="{page_num}" data-type="figure">
-            <span>Figure Placeholder</span>
+        <div id="{element_id}" class="figure-placeholder" style="position: absolute; left: {left:.2f}px; top: {top:.2f}px; width: {width:.2f}px; height: {height:.2f}px; border: 2px dashed #999; background: #f5f5f5; display:flex; align-items:center; justify-content:center;" data-block-id="{block.get('Id', '')}" data-page="{page_num}" data-type="{block_type.lower()}">
+            <span>{placeholder_text}</span>
         </div>''')
-        
-        # Then, render text blocks
-        for idx, block in enumerate(page_data['lines']):
+
+        # Then render loose lines that aren't part of any layout block
+        for idx, block in enumerate(page_data.get('loose_lines', [])):
             text = block.get('Text', '')
             geometry = block.get('Geometry', {})
             bbox = geometry.get('BoundingBox', {})
-            polygon = geometry.get('Polygon', [])
-            
             if not bbox:
                 continue
-            
-            # Convert normalized coordinates to absolute pixels
-            # Textract BoundingBox: { Left, Top, Width, Height } - all normalized 0-1
+
             left = bbox.get('Left', 0) * page_width
             top = bbox.get('Top', 0) * page_height
             width = bbox.get('Width', 0) * page_width
             height = bbox.get('Height', 0) * page_height
-            
-            # Calculate rotation angle - prefer Textract's RotationAngle if available
-            rotation_angle = geometry.get('RotationAngle', 0)
-            transform_origin = 'top left'
-            
-            # If Textract didn't detect rotation, try polygon calculation
-            if abs(rotation_angle) < 1 and polygon and len(polygon) >= 4:
-                # Get the first two points to calculate angle
-                p1 = polygon[0]  # Top-left
-                p2 = polygon[1]  # Top-right
-                
-                # Convert to absolute coordinates
-                x1 = p1.get('X', 0) * page_width
-                y1 = p1.get('Y', 0) * page_height
-                x2 = p2.get('X', 0) * page_width
-                y2 = p2.get('Y', 0) * page_height
-                
-                # Calculate angle in degrees
-                dx = x2 - x1
-                dy = y2 - y1
-                rotation_angle = math.degrees(math.atan2(dy, dx))
-                
-                # Debug log for rotated text
-                if abs(rotation_angle) > 1:
-                    logger.debug(f"Rotated text detected: '{text[:20]}...' angle={rotation_angle:.2f}°")
-            
-            # Fallback: Detect vertical text from aspect ratio if polygon detection failed
-            if abs(rotation_angle) < 1 and height > 0 and width > 0:
-                aspect_ratio = height / width
-                # If height is much greater than width (tall & narrow), assume vertical text
-                if aspect_ratio > 3.0:  # Height is 3x+ the width
-                    rotation_angle = -90  # Rotate counter-clockwise
-                    logger.debug(f"Vertical text detected by aspect ratio: '{text[:20]}...' (h/w={aspect_ratio:.1f})")
-            
-            # Adjust transform origin and positioning for rotated text
-            adjust_left = left
-            adjust_top = top
-            
-            if abs(rotation_angle) > 45 and abs(rotation_angle) < 135:
-                # Vertical or nearly vertical text
-                # For -90 degree rotation, adjust positioning to compensate
-                if rotation_angle < 0:  # Counter-clockwise rotation
-                    transform_origin = 'top left'
-                    # Adjust position to account for rotation
-                    adjust_left = left + height  # Move right by the original height
-                else:  # Clockwise rotation
-                    transform_origin = 'bottom left'
-            
-            # Detect actual font information from PDF if available
-            font_family = 'Times New Roman, Times, serif'
+
+            font_size = _calculate_font_size(height)
             font_weight = 'normal'
-            font_style = 'normal'
-            
-            if pdf_content:
-                try:
-                    from utils.pdf_service import get_font_info_from_bbox, map_font_to_reportlab
-                    
-                    # Convert normalized bbox to absolute coordinates for font detection
-                    # Note: page_number is 0-indexed in PyMuPDF
-                    font_bbox = {
-                        'x': left,
-                        'y': top,
-                        'width': width,
-                        'height': height
-                    }
-                    
-                    font_info = get_font_info_from_bbox(
-                        pdf_content=pdf_content,
-                        page_number=page_num - 1,  # Convert to 0-indexed
-                        bbox=font_bbox
-                    )
-                    
-                    if font_info:
-                        font_size = font_info['font_size']
-                        
-                        # Map PDF font to web font family
-                        font_name = font_info['font_name'].lower()
-                        if 'times' in font_name:
-                            font_family = 'Times New Roman, Times, serif'
-                        elif 'helvetica' in font_name or 'arial' in font_name:
-                            font_family = 'Arial, Helvetica, sans-serif'
-                        elif 'courier' in font_name:
-                            font_family = 'Courier New, Courier, monospace'
-                        elif 'calibri' in font_name:
-                            font_family = 'Calibri, Arial, sans-serif'
-                        else:
-                            font_family = 'Times New Roman, Times, serif'
-                        
-                        # Apply font styles
-                        font_weight = 'bold' if font_info['is_bold'] else 'normal'
-                        font_style = 'italic' if font_info['is_italic'] else 'normal'
-                        
-                        logger.debug(f"Detected font: {font_info['font_name']} ({font_size:.1f}pt) for '{text[:30]}...'")
-                    else:
-                        # Fallback to estimation if detection failed
-                        if abs(rotation_angle) > 45 and abs(rotation_angle) < 135:
-                            font_size = width * 1.0
-                        else:
-                            font_size = height * 0.8
-                        logger.debug(f"Font detection failed, using estimated size: {font_size:.1f}pt")
-                        
-                except Exception as e:
-                    logger.warning(f"Font detection error: {str(e)}, falling back to estimation")
-                    # Fallback to estimation
-                    if abs(rotation_angle) > 45 and abs(rotation_angle) < 135:
-                        font_size = width * 1.0
-                    else:
-                        font_size = height * 0.8
-            else:
-                # No PDF content provided, estimate from bounding box
-                if abs(rotation_angle) > 45 and abs(rotation_angle) < 135:
-                    font_size = width * 1.0
-                else:
-                    font_size = height * 0.8
-            
-            # Generate a unique ID for this text element
-            element_id = f"page{page_num}-text-block-{idx}"
-            
-            # Escape HTML special characters in text
+
             escaped_text = (
                 text.replace('&', '&amp;')
                     .replace('<', '&lt;')
@@ -306,36 +433,64 @@ def generate_html_from_textract(
                     .replace('"', '&quot;')
                     .replace("'", '&#39;')
             )
+
+            element_id = f"page{page_num}-text-block-{idx}"
             
-            # Build transform string
-            transform = f'rotate({rotation_angle:.2f}deg)' if abs(rotation_angle) > 1 else ''
-            transform_style = f'transform: {transform}; transform-origin: {transform_origin};' if transform else ''
+            # Check if this LINE block has WORD children
+            child_ids = []
+            for rel in block.get('Relationships', []) or []:
+                if rel.get('Type') == 'CHILD':
+                    child_ids.extend(rel.get('Ids', []))
             
-            # Create positioned div element
+            # Render each word in the LINE as a span, with data-block-id if a matching WORD block exists
+            text = block.get('Text', '')
+            # Get WORD children in order
+            word_child_ids = []
+            for rel in block.get('Relationships', []) or []:
+                if rel.get('Type') == 'CHILD':
+                    word_child_ids.extend(rel.get('Ids', []))
+            
+            # Render line with preserved whitespace
+            line_html = _render_line_with_spaces(text, word_child_ids, words_by_id)
             html_elements.append(f'''
-        <div id="{element_id}" class="text-block" style="
-            position: absolute;
-            left: {adjust_left:.2f}px;
-            top: {adjust_top:.2f}px;
-            width: {width:.2f}px;
-            height: {height:.2f}px;
-            font-family: {font_family};
-            font-size: {font_size:.2f}px;
-            font-weight: {font_weight};
-            font-style: {font_style};
-            line-height: {height:.2f}px;
-            overflow: visible;
-            white-space: nowrap;
-            {transform_style}
-        " data-block-id="{block.get('Id', '')}" data-page="{page_num}" data-rotation="{rotation_angle:.2f}">{escaped_text}</div>''')
+        <div id="{element_id}" class="text-block" style="position: absolute; left: {left:.2f}px; top: {top:.2f}px; width: {width:.2f}px; height: {height:.2f}px; font-size: {font_size:.2f}px; line-height: {height:.2f}px; font-weight: {font_weight}; font-family: 'Times New Roman', Times, serif; white-space: nowrap;" data-block-id="{block.get('Id', '')}" data-page="{page_num}">{line_html}</div>''')
         
+        # Render standalone WORD blocks (not children of LINE blocks)
+        for idx, word in enumerate(page_data.get('loose_words', [])):
+            text = word.get('Text', '')
+            geometry = word.get('Geometry', {})
+            bbox = geometry.get('BoundingBox', {})
+            if not bbox:
+                continue
+
+            left = bbox.get('Left', 0) * page_width
+            top = bbox.get('Top', 0) * page_height
+            width = bbox.get('Width', 0) * page_width
+            height = bbox.get('Height', 0) * page_height
+
+            font_size = _calculate_font_size(height)
+            font_weight = 'normal'
+            font_family = 'Times New Roman, Times, serif'
+
+            escaped_text = (
+                text.replace('&', '&amp;')
+                    .replace('<', '&lt;')
+                    .replace('>', '&gt;')
+                    .replace('"', '&quot;')
+                    .replace("'", '&#39;')
+            )
+
+            element_id = f"page{page_num}-word-{idx}"
+            html_elements.append(f'''
+        <div id="{element_id}" class="word-block" style="position: absolute; left: {left:.2f}px; top: {top:.2f}px; font-size: {font_size:.2f}px; font-weight: {font_weight}; font-family: {font_family}; white-space: nowrap;" data-block-id="{word.get('Id', '')}" data-page="{page_num}">{escaped_text}</div>''')
+
         # Wrap this page's blocks in a page container
         page_html = f'''
     <div class="page" data-page="{page_num}">
-        <!-- Page {page_num} text blocks -->
+        <!-- Page {page_num} blocks -->
         {''.join(html_elements)}
     </div>'''
-        
+
         all_pages_html.append(page_html)
     
     # Build complete HTML document
@@ -373,6 +528,12 @@ def generate_html_from_textract(
         .text-block {{
             font-family: 'Times New Roman', Times, serif;
             color: #000000;
+        }}
+        
+        /* Make word elements inline-block and preserve whitespace */
+        .word {{
+            display: inline-block;
+            white-space: pre;
         }}
         
         .figure-placeholder {{
