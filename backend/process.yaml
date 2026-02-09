@@ -79,7 +79,7 @@ Defaults:
 Technical Specifications:
   - Textract API: AnalyzeDocument with LAYOUT feature enabled
   - Coordinate system: Normalized coordinates (0-1 range) relative to page dimensions
-  - Maximum PDF size: 10MB per template
+  - Maximum PDF size: 50MB per template
   - Supported PDF versions: 1.3 through 1.7
   - Multi-page handling: Each page is processed independently and stored as separate HTML sections
   - S3 bucket structure:

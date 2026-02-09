@@ -1,3 +1,45 @@
+// Fetch HTML template from S3 (for preview/validation)
+export async function fetchHtmlTemplate(templateName, bucket) {
+    // Get the auth session details
+    const { token, sub } = await getAuthSession();
+    if (!token) throw new Error('Authentication token is missing');
+    if (!sub) throw new Error('User ID (sub) is missing from token');
+    if (!templateName) throw new Error('Template name is required');
+    if (!bucket) throw new Error('Bucket name is required');
+
+    // Construct S3 key for HTML template
+    const s3Key = `users/${sub}/templates/${templateName}/${templateName}.html`;
+    const apiEndpoint = import.meta.env.VITE_AWS_S3_GET_API_ENDPOINT;
+    if (!apiEndpoint) throw new Error('API endpoint is not configured. Please check your environment variables.');
+
+    // Step 1: Get pre-signed URL from backend
+    const presignedUrlResponse = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            bucket: bucket,
+            key: s3Key,
+            method: 'get'
+        })
+    });
+    if (!presignedUrlResponse.ok) {
+        const errorText = await presignedUrlResponse.text();
+        throw new Error(`Failed to get pre-signed URL: ${presignedUrlResponse.status}. ${errorText}`);
+    }
+    const { presignedUrl } = await presignedUrlResponse.json();
+    if (!presignedUrl) throw new Error('No pre-signed URL returned from server');
+
+    // Step 2: Fetch HTML content
+    const htmlResponse = await fetch(presignedUrl);
+    if (!htmlResponse.ok) {
+        const errorText = await htmlResponse.text();
+        throw new Error(`Failed to fetch HTML template: ${htmlResponse.status}. ${errorText}`);
+    }
+    return await htmlResponse.text();
+}
 import { fetchAuthSession } from 'aws-amplify/auth';
 
 async function getAuthSession() {

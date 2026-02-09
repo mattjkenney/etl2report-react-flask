@@ -80,32 +80,12 @@ export default function CreateReport({ onBack, onNavigateToViewReports }) {
             }
             const authToken = session.tokens.idToken.toString();
 
-            // Build replacements array from boxToValueMap and textractBlocks
-            const replacements = [];
-            
+            // Build replacements object: blockId → text
+            const replacements = {};
             for (const [blockId, text] of Object.entries(boxToValueMap)) {
-                // Find the corresponding block in textractBlocks
-                const block = textractBlocks?.find(b => b.Id === blockId);
-                
-                if (block && block.Geometry && block.Geometry.BoundingBox) {
-                    const bbox = block.Geometry.BoundingBox;
-                    
-                    // Convert normalized coordinates (0-1) to PDF points
-                    // Assuming standard PDF page size of 612x792 points (8.5"x11" at 72 DPI)
-                    const pageWidth = 612;
-                    const pageHeight = 792;
-                    
-                    replacements.push({
-                        x: bbox.Left * pageWidth,
-                        y: bbox.Top * pageHeight,
-                        width: bbox.Width * pageWidth,
-                        height: bbox.Height * pageHeight,
-                        text: text || ''
-                    });
-                }
+                replacements[blockId] = text || '';
             }
-
-            if (replacements.length === 0) {
+            if (Object.keys(replacements).length === 0) {
                 throw new Error('No text replacements to apply. Please bind variables to bounding boxes first.');
             }
 
@@ -117,33 +97,27 @@ export default function CreateReport({ onBack, onNavigateToViewReports }) {
 
             // Extract user ID from token for constructing S3 keys
             const userSub = session.tokens.idToken.payload.sub;
-            
-            // Construct source key (template location in S3)
-            // Ensure template name doesn't have .pdf extension for the folder name
+
+            // Construct template name (without .pdf extension)
             const templateName = currentTemplate.replace('.pdf', '');
-            // Ensure currentTemplate has .pdf extension for the file name
-            const templateFileName = currentTemplate.endsWith('.pdf') ? currentTemplate : `${currentTemplate}.pdf`;
-            const sourceKey = `users/${userSub}/templates/${templateName}/${templateFileName}`;
-            
+
             // Construct destination key for the generated report
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const filename = `${templateName}_${timestamp}.pdf`;
             const outputKey = `users/${userSub}/reports/${filename}`;
 
-            // Call the replace_pdf_text API
+            // Call the new HTML-based API endpoint
             const backendDomain = import.meta.env.VITE_BACKEND_DOMAIN || 'http://localhost:5000';
-            const response = await fetch(`${backendDomain}/api/pdf/replace-text`, {
+            const response = await fetch(`${backendDomain}/api/report/generate-from-html`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${authToken}`,
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    template_id: sourceKey,
+                    template_id: templateName, // no .pdf extension
                     replacements: replacements,
-                    page_number: 0,
-                    source_bucket: bucket,
-                    destination_bucket: bucket,
+                    bucket: bucket,
                     output_key: outputKey
                 }),
             });
@@ -153,9 +127,7 @@ export default function CreateReport({ onBack, onNavigateToViewReports }) {
                 throw new Error(errorData.error || errorData.message || 'Failed to generate report');
             }
 
-            
             const result = await response.json();
-            
             console.log('Report generated successfully:', result);
             setSuccessMessage(`Report generated successfully! File saved to: ${result.destination}`);
             

@@ -21,8 +21,16 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
         "origins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
-        "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": [
+            "Content-Type",
+            "Authorization",
+            "application/json",
+            "multipart/form-data",
+            "text/plain"
+        ],
+        "supports_credentials": True,
+        "expose_headers": ["Content-Type"]
     }
 })
 
@@ -294,6 +302,58 @@ def convert_pdf_to_html():
             'error': str(e),
             'message': 'Failed to convert PDF to HTML template'
         }), 500
+
+
+# HTML-based report generation endpoint
+from utils.html_service import fetch_html_template_from_s3, replace_html_elements_by_block_id, convert_html_to_pdf_playwright
+import asyncio
+
+@app.route('/api/report/generate-from-html', methods=['POST', 'OPTIONS'])
+def generate_report_from_html():
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        return '', 200
+    """
+    Generate a report by fetching an HTML template from S3, replacing elements by data-block-id, converting to PDF, and uploading to S3.
+    """
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Missing authorization'}), 401
+
+        auth_token = auth_header.replace('Bearer ', '')
+        data = request.get_json()
+
+        template_id = data.get('template_id')
+        replacements = data.get('replacements', {})
+        output_key = data.get('output_key')
+        bucket = data.get('bucket') or os.getenv('S3_BUCKET')
+
+        if not template_id or not output_key or not bucket:
+            return jsonify({'success': False, 'error': 'Missing required fields: template_id, output_key, bucket'}), 400
+
+        # Step 1: Fetch HTML template
+        html_content = fetch_html_template_from_s3(bucket, template_id, auth_token)
+
+        # Step 2: Replace elements by data-block-id
+        modified_html = replace_html_elements_by_block_id(html_content, replacements)
+
+        # Step 3: Convert to PDF
+        pdf_bytes = asyncio.run(convert_html_to_pdf_playwright(modified_html))
+
+        # Step 4: Upload PDF to S3
+        from utils.pdf_service import upload_pdf_to_s3
+        upload_pdf_to_s3(bucket, output_key, pdf_bytes, auth_token)
+
+        return jsonify({
+            'success': True,
+            'destination': output_key,
+            'message': 'Report generated successfully'
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e), 'message': 'Failed to generate report from HTML'}), 500
 
 
 if __name__ == '__main__':

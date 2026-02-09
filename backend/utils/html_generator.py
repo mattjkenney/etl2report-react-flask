@@ -16,7 +16,6 @@ import logging
 import math
 import re
 from typing import List, Dict, Any, Optional
-from backend.utils.text_width import measure_text_width
 
 logger = logging.getLogger(__name__)
 
