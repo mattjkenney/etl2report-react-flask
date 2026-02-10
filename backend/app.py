@@ -17,10 +17,15 @@ from utils.html_generator import generate_html_from_textract
 # Initialize Flask app
 app = Flask(__name__)
 
+# Get allowed frontend origins from environment variable
+# For development: use localhost URLs
+# For production: use your deployed frontend URL (comma-separated for multiple origins)
+frontend_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',')
+
 # Configure CORS for React frontend
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+        "origins": frontend_origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": [
             "Content-Type",
