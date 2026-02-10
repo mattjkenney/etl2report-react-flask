@@ -57,14 +57,14 @@ export default function Dashboard() {
     return (
         <div 
             ref={containerRef} 
-            className="flex dashboard-container"
+            className="flex dashboard-container overflow-hidden"
             style={{ 
                 minHeight: dashboardMinHeight
             }}
         >
             {/* Actions component */}
             <div 
-                className="flex-shrink-0" 
+                className="flex-shrink-0 min-w-0" 
                 style={{ width: actionsWidth + '%' }}
             >
                 <Actions />
@@ -79,7 +79,7 @@ export default function Dashboard() {
             
             {/* View component */}
             <div 
-                className="flex-grow"
+                className="flex-grow min-w-0 overflow-hidden"
             >
                 <View />
             </div>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { setSelectionMode } from '../store/dash/view';
 import { addVariable } from '../store/dash/variableContainers';
-import { initializeInput } from '../store/dash/manualInput';
+import { initializeItem } from '../store/dash/variables';
 import { setBinding } from '../store/dash/boxBindings';
 
 /**
@@ -134,13 +134,6 @@ export default function BoundingBoxOverlay({ blocks, pageNumber, pageWidth, page
             >
                 {filteredBlocks.map(block => renderBoundingBox(block))}
             </div>
-
-            {/* Selection mode indicator */}
-            {selectionMode.enabled && (
-                <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
-                    Click on a bounding box to change the selected block
-                </div>
-            )}
 
             {/* Info panel for selected block */}
             {selectedBlock && (

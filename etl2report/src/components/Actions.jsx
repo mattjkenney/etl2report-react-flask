@@ -3,19 +3,23 @@ import { useDispatch, useSelector } from 'react-redux';
 import { setReportFile } from '../store/dash/actions/newTemplate';
 import { resetPdfViewer, setPdfUrl, setTextractBlocks, setLoading } from '../store/dash/pdfViewer';
 import { setActionsDefaultHeight } from '../store/dash/sizing';
-import { fetchTemplates, fetchTemplatePdf, fetchTemplateTextract } from '../store/dash/templates';
+import { fetchTemplates, fetchTemplatePdf, fetchTemplateTextract, setCurrentTemplate } from '../store/dash/templates';
+import { setSelectedReport } from '../store/dash/reports';
 import Button from './Button';
 import LoadingSpinner from './LoadingSpinner';
 import NewTemplate from './NewTemplate';
 import EditTemplate from './EditTemplate';
+import CreateReport from './CreateReport';
+import ViewReports from './ViewReports';
 
 export default function Actions() {
     const dispatch = useDispatch();
     const { actionsDefaultHeight } = useSelector(state => state.sizing);
-    const { templates, loading, error, loadingPdf } = useSelector(state => state.templates);
-    const [selectedTemplate, setSelectedTemplate] = useState('');
+    const { templates, loading, error, loadingPdf, currentTemplate } = useSelector(state => state.templates);
     const [showNewTemplate, setShowNewTemplate] = useState(false);
     const [showEditTemplate, setShowEditTemplate] = useState(false);
+    const [showCreateReport, setShowCreateReport] = useState(false);
+    const [showViewReports, setShowViewReports] = useState(false);
 
     // Fetch templates on component mount
     useEffect(() => {
@@ -40,7 +44,9 @@ export default function Actions() {
 
     const handleTemplateChange = (e) => {
         const templateName = e.target.value;
-        setSelectedTemplate(templateName);
+        
+        // Update Redux with the current template
+        dispatch(setCurrentTemplate(templateName || null));
         
         // If a template is selected, load its PDF
         if (templateName) {
@@ -63,13 +69,13 @@ export default function Actions() {
     };
     
     const handleEditClick = async () => {
-        if (!selectedTemplate) return;
+        if (!currentTemplate) return;
         
         // Show the EditTemplate component first
         setShowEditTemplate(true);
         
         try {
-            const blocks = await dispatch(fetchTemplateTextract(selectedTemplate));
+            const blocks = await dispatch(fetchTemplateTextract(currentTemplate));
             dispatch(setTextractBlocks(blocks));
             // You might want to show a success message or notification here
         } catch (error) {
@@ -82,17 +88,102 @@ export default function Actions() {
         setShowNewTemplate(true);
     };
 
+    const handleCreateReportClick = async () => {
+        if (!currentTemplate) return;
+        
+        // Load template data if not already loaded
+        setShowCreateReport(true);
+        
+        // If textract blocks aren't loaded, load them
+        // (They should already be loaded if user went through Edit, but just in case)
+        try {
+            const blocks = await dispatch(fetchTemplateTextract(currentTemplate));
+            dispatch(setTextractBlocks(blocks));
+        } catch (error) {
+            console.error('Failed to load Textract results:', error);
+            alert('Failed to load template data. Please try again.');
+            setShowCreateReport(false);
+        }
+    };
+
+    const handleViewReportsClick = () => {
+        // Clear any previously selected report
+        dispatch(setSelectedReport(null));
+        setShowViewReports(true);
+    };
+
+    const handleNavigateToViewReports = () => {
+        setShowCreateReport(false);
+        setShowViewReports(true);
+    };
+
     const handleBackToActions = () => {
         setShowNewTemplate(false);
         setShowEditTemplate(false);
-        setSelectedTemplate('');
+        setShowCreateReport(false);
+        setShowViewReports(false);
+        // Clear the current template in Redux
+        dispatch(setCurrentTemplate(null));
         // Clear the file metadata when going back
         dispatch(setReportFile(null));
         // Clear the PDF viewer
         dispatch(resetPdfViewer());
     };
 
-    const isTemplateSelected = selectedTemplate !== '';
+    const isTemplateSelected = currentTemplate !== '' && currentTemplate !== null;
+
+    // If showing view reports, render it instead of the main actions
+    if (showViewReports) {
+        return (
+            <div 
+                className="bg-theme-secondary border border-theme-primary rounded-lg dashboard-content overflow-y-auto"
+                style={{ maxHeight: `${actionsDefaultHeight}px` }}
+            >
+                <div className="p-4">
+                    <div className="flex items-center mb-4">
+                        <Button
+                            displayText="← Back"
+                            onClick={handleBackToActions}
+                            variant="secondary"
+                            size="small"
+                            type="button"
+                        />
+                    </div>
+                    <div className="space-y-4">
+                        <ViewReports onBack={handleBackToActions} />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // If showing create report form, render it instead of the main actions
+    if (showCreateReport) {
+        return (
+            <div 
+                className="bg-theme-secondary border border-theme-primary rounded-lg dashboard-content overflow-y-auto"
+                style={{ maxHeight: `${actionsDefaultHeight}px` }}
+            >
+                <div className="p-4">
+                    <div className="flex items-center mb-4">
+                        <Button
+                            displayText="← Back"
+                            onClick={handleBackToActions}
+                            variant="secondary"
+                            size="small"
+                            type="button"
+                        />
+                    </div>
+                    <div className="space-y-4">
+                        <CreateReport 
+                            onBack={handleBackToActions} 
+                            onNavigateToViewReports={handleNavigateToViewReports}
+                        />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // If showing edit template form, render it instead of the main actions
     if (showEditTemplate) {
@@ -112,10 +203,7 @@ export default function Actions() {
                         />
                     </div>
                     <div className="space-y-4">
-                        <EditTemplate 
-                            templateName={selectedTemplate}
-                            onBack={handleBackToActions}
-                        />
+                        <EditTemplate onBack={handleBackToActions} />
                     </div>
                 </div>
             </div>
@@ -169,7 +257,7 @@ export default function Actions() {
                         <select
                             id="template-select"
                             name="template"
-                            value={selectedTemplate}
+                            value={currentTemplate || ''}
                             onChange={handleTemplateChange}
                             className="flex-1 px-3 py-2 border border-theme-primary rounded-md bg-theme-secondary text-theme-primary focus:outline-none focus:ring-2 focus:ring-theme-primary focus:border-transparent"
                             disabled={loading}
@@ -225,12 +313,20 @@ export default function Actions() {
                     />
                     <Button
                         displayText="Create Report"
-                        onClick={() => alert('Create Report action triggered')}
+                        onClick={handleCreateReportClick}
                         variant='primary'
                         size='small'
                         className='w-full'
-                        type='submit'
+                        type='button'
                         disabled={!isTemplateSelected}
+                    />
+                    <Button
+                        displayText="View Reports"
+                        onClick={handleViewReportsClick}
+                        variant='secondary'
+                        size='small'
+                        className='w-full'
+                        type='button'
                     />
                 </div>
             </form>

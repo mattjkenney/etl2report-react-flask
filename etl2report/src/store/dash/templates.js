@@ -8,6 +8,8 @@ const initialState = {
     error: null,
     bucket: null,
     parentFolder: 'templates',
+    // Current active template being edited
+    currentTemplate: null,
     // Cache timestamp for templates list
     templatesFetchedAt: null,
     // Cache for template PDFs - { templateName: { url, fetchedAt } }
@@ -41,6 +43,10 @@ const templatesSlice = createSlice({
             state.templates = [];
             state.templatesFetchedAt = null;
             state.error = null;
+        },
+        // Set the current active template
+        setCurrentTemplate: (state, action) => {
+            state.currentTemplate = action.payload;
         },
         // PDF caching actions
         fetchPdfStart: (state, action) => {
@@ -105,6 +111,7 @@ export const {
     fetchTemplatesSuccess,
     fetchTemplatesFailure,
     clearTemplates,
+    setCurrentTemplate,
     fetchPdfStart,
     fetchPdfSuccess,
     fetchPdfFailure,

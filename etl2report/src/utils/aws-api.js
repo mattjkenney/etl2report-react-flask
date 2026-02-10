@@ -1,3 +1,45 @@
+// Fetch HTML template from S3 (for preview/validation)
+export async function fetchHtmlTemplate(templateName, bucket) {
+    // Get the auth session details
+    const { token, sub } = await getAuthSession();
+    if (!token) throw new Error('Authentication token is missing');
+    if (!sub) throw new Error('User ID (sub) is missing from token');
+    if (!templateName) throw new Error('Template name is required');
+    if (!bucket) throw new Error('Bucket name is required');
+
+    // Construct S3 key for HTML template
+    const s3Key = `users/${sub}/templates/${templateName}/${templateName}.html`;
+    const apiEndpoint = import.meta.env.VITE_AWS_S3_GET_API_ENDPOINT;
+    if (!apiEndpoint) throw new Error('API endpoint is not configured. Please check your environment variables.');
+
+    // Step 1: Get pre-signed URL from backend
+    const presignedUrlResponse = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            bucket: bucket,
+            key: s3Key,
+            method: 'get'
+        })
+    });
+    if (!presignedUrlResponse.ok) {
+        const errorText = await presignedUrlResponse.text();
+        throw new Error(`Failed to get pre-signed URL: ${presignedUrlResponse.status}. ${errorText}`);
+    }
+    const { presignedUrl } = await presignedUrlResponse.json();
+    if (!presignedUrl) throw new Error('No pre-signed URL returned from server');
+
+    // Step 2: Fetch HTML content
+    const htmlResponse = await fetch(presignedUrl);
+    if (!htmlResponse.ok) {
+        const errorText = await htmlResponse.text();
+        throw new Error(`Failed to fetch HTML template: ${htmlResponse.status}. ${errorText}`);
+    }
+    return await htmlResponse.text();
+}
 import { fetchAuthSession } from 'aws-amplify/auth';
 
 async function getAuthSession() {
@@ -30,7 +72,7 @@ async function getAuthSession() {
     }
 }
 
-export async function uploadFile(file, bucketName, key = null, description = '') {
+export async function uploadFile(file, bucketName, key, description = '') {
     try {
         // Get the auth session details
         const { token, sub } = await getAuthSession();
@@ -48,6 +90,9 @@ export async function uploadFile(file, bucketName, key = null, description = '')
         if (!bucketName) {
             throw new Error('Bucket name is required');
         }
+        if (!key) {
+            throw new Error('Key is required');
+        }
         
         // Verify we have an API endpoint
         const apiEndpoint = import.meta.env.VITE_AWS_S3_PUT_API_ENDPOINT;
@@ -55,18 +100,8 @@ export async function uploadFile(file, bucketName, key = null, description = '')
             throw new Error('API endpoint is not configured. Please check your environment variables.');
         }
 
-        // Ensure key ends with .pdf if provided
-        let finalKey = key || file.name;
-        let S3Key_prefix = '';
-        if (key && !key.toLowerCase().endsWith('.pdf')) {
-            finalKey = `${key}.pdf`;
-            S3Key_prefix = key;
-        } else {
-            S3Key_prefix = key.slice(0, -4); // Remove .pdf
-        }
-
-        // Use provided key or construct default S3 key
-        const s3Key = `users/${sub}/templates/${S3Key_prefix}/${finalKey}`;
+        // Construct S3 key with user prefix
+        const s3Key = `users/${sub}/${key}`;
 
         // console.log('Requesting pre-signed URL:', {
         //     fileSize: file.size,
@@ -92,6 +127,9 @@ export async function uploadFile(file, bucketName, key = null, description = '')
                 contentType: file.type,
                 description: description
             })
+        }).catch(err => {
+            // Network error - couldn't reach the API endpoint
+            throw new Error(`Network error: Could not reach API endpoint at ${apiEndpoint}. ${err.message}`);
         });
 
         if (!presignedUrlResponse.ok) {
@@ -601,6 +639,84 @@ export async function getTextractResultsFromS3(bucket, templateName) {
         };
     } catch (error) {
         console.error('Error getting Textract results from S3:', error);
+        throw error;
+    }
+}
+/**
+ * Convert PDF to HTML template using Textract blocks.
+ * 
+ * @param {string} templateName - The name of the template
+ * @param {Array} textractBlocks - Array of Textract block objects
+ * @param {number} pageWidth - Optional page width in points (default: 612)
+ * @param {number} pageHeight - Optional page height in points (default: 792)
+ * @returns {Promise<Object>} Object containing HTML content and metadata
+ */
+export async function convertPdfToHtml(templateName, textractBlocks, pageWidth = 612, pageHeight = 792, pdfS3Bucket = null, pdfS3Key = null) {
+    try {
+        // Get the auth session details
+        const { token } = await getAuthSession();
+        
+        // Validate required parameters
+        if (!token) {
+            throw new Error('Authentication token is missing');
+        }
+        if (!templateName) {
+            throw new Error('Template name is required');
+        }
+        if (!Array.isArray(textractBlocks)) {
+            throw new Error('Textract blocks must be an array');
+        }
+        
+        // Get Flask backend endpoint from environment
+        const backendEndpoint = import.meta.env.VITE_FLASK_BACKEND_URL || 'http://localhost:5000';
+        const apiEndpoint = `${backendEndpoint}/api/pdf/convert-to-html`;
+        
+        // Build request body
+        const requestBody = {
+            template_name: templateName,
+            textract_blocks: textractBlocks,
+            page_width: pageWidth,
+            page_height: pageHeight
+        };
+        
+        // Add PDF S3 location for font detection if provided
+        if (pdfS3Bucket && pdfS3Key) {
+            requestBody.pdf_s3_bucket = pdfS3Bucket;
+            requestBody.pdf_s3_key = pdfS3Key;
+        }
+        
+        // Call the Flask backend API
+        const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to convert PDF to HTML: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (!data.success || !data.html) {
+            throw new Error('Invalid response from HTML conversion service');
+        }
+        
+        // Return success data
+        return {
+            success: true,
+            html: data.html,
+            templateName: data.template_name,
+            blockCount: data.block_count,
+            pageDimensions: data.page_dimensions,
+            fontDetectionEnabled: data.font_detection_enabled || false
+        };
+    } catch (error) {
+        console.error('Error converting PDF to HTML:', error);
         throw error;
     }
 }

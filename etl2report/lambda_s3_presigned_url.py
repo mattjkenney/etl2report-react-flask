@@ -56,10 +56,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if method == 'put':
             if not content_type:
                 return create_response(400, {'error': 'Missing required parameter: contentType (required for PUT operations)'})
-            
-            # Validate file type - only allow PDF files for PUT
-            if content_type != 'application/pdf':
-                return create_response(400, {'error': f'Invalid file type: {content_type}. Only PDF files (application/pdf) are allowed'})
         
         # Extract user ID from Cognito authorizer claims
         claims = event.get('requestContext', {}).get('authorizer', {}).get('claims', {})

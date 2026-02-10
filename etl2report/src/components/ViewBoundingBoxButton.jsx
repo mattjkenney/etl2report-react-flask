@@ -6,8 +6,9 @@ import { selectBinding, removeBlockBinding } from '../store/dash/boxBindings';
 import Button from './Button';
 import RemoveButton from './RemoveButton';
 
-export default function ViewBoundingBoxButton({ id, templateName }) {
+export default function ViewBoundingBoxButton({ id }) {
     const dispatch = useDispatch();
+    const templateName = useSelector((state) => state.templates.currentTemplate);
     const [enableSelection, setEnableSelection] = useState(false);
     const selectionMode = useSelector((state) => state.view.selectionMode);
     

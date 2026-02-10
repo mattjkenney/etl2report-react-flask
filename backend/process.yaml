@@ -1,0 +1,124 @@
+Process:
+  - Create a template:
+    - User uploads a pdf template
+    - PDF template is stored in S3 bucket
+    - Textract analyzes the PDF template and stores the extracted data in S3
+    - Bounding boxes are overlayed on PDF template and presented to user for field mapping
+    - Create an html file from the PDF template and store it in S3:
+      - LAYOUT_FIGURE type bounding box: 
+        - Replace with a rectangle element with the same dimensions and position as the bounding box, and a placeholder text "FIGURE"
+        - CHILD bounding boxes are ignored and not rendered in the HTML template
+      - LAYOUT_TABLE type bounding box: 
+        - Replace with a rectangle element with the same dimensions and position as the bounding box, and a placeholder text "TABLE"
+        - CHILD bounding boxes are ignored and not rendered in the HTML template
+      - WORD type bounding boxes:
+        - Is the bounding box a child of a LINE type bounding box?:
+          - Yes:
+            - Create a span element for the WORD bounding box with only these attributes:
+              - data-block-id: Bounding box id
+            - Place the span element inside the corresponding LINE div element
+          - No:
+            - Create a div element for the WORD bounding box with these attributes:
+              - data-block-id: Bounding box id
+              - Style attributes:
+                - Position: absolute
+                - Left: x coordinate of the bounding box
+                - Top: y coordinate of the bounding box
+                - font-size: closest normalized font-size based on the height of the bounding box
+                - font-family: detected font family if available, otherwise default font family
+                - font-weight: detected font weight if available, otherwise default font weight
+      - LINE type bounding boxes:
+        - Create a div element for the LINE bounding box with these attributes:
+          - data-block-id: Bounding box id
+          - Style attributes:
+            - Position: absolute
+            - Left: x coordinate of the bounding box
+            - Top: y coordinate of the bounding box
+            - font-size: closest normalized font-size based on the height of the bounding box
+            - font-family: detected font family if available, otherwise default font family
+            - font-weight: detected font weight if available, otherwise default font weight
+        - Does the content of the LINE bounding box contain any white space leading, trailing, or in between child types?:
+          - Yes:
+            - Wrap each single space character in a span element to preserve spacing in HTML
+        - Is the LINE bounding box a child of a LAYOUT_TEXT type bounding box?:
+          - Yes:
+            - Place the LINE div element inside the corresponding LAYOUT_TEXT div element        
+  - Create template variables:
+    - User creates input fields
+    - User maps input fields to bounding box ids
+    - Mapping a bounding box excludes all its ancestors and descendants from being mapped:
+      - Example: Mapping a LINE prevents mapping its child WORDs or parent LAYOUT_TEXT
+
+  - Generate and fill template form:
+    - Form is created with defined template variables
+    - User completes the form with input data
+  - Document merging:
+    - Pull the html template from S3
+    - For each input field:
+      - Find the element with a data-block-id matching the input field's mapped bounding box id
+      - Remove the all content of the element including any child elements
+      - Set the content of the element to the input field's value
+    - Convert the filled html template to a PDF document
+    - Store the generated PDF document in S3
+    - Present the generated PDF document to the user for download
+
+Defaults:
+  - Default font family: Times New Roman
+  - Default font weight: normal
+  - Font-size calculation:
+    - Take the detected font-size (bounding box height in pixels)
+    - Round to the nearest even whole number
+    - If the result is 0, use 1px instead
+    - Examples:
+      - 0.7px → 1px (rounds to 0, so use 1)
+      - 1.2px → 2px (rounds to even)
+      - 6.8px → 6px (rounds to even)
+      - 11.4px → 12px
+      - 13.6px → 14px
+
+Technical Specifications:
+  - Textract API: AnalyzeDocument with LAYOUT feature enabled
+  - Coordinate system: Normalized coordinates (0-1 range) relative to page dimensions
+  - Maximum PDF size: 50MB per template
+  - Supported PDF versions: 1.3 through 1.7
+  - Multi-page handling: Each page is processed independently and stored as separate HTML sections
+  - S3 bucket structure:
+    - Base PDF template file: users/{user_id}/templates/{template_id}/{template_id}.pdf
+    - Textract Results folder: users/{user_id}/templates/{template_id}/textract-jobs/
+    - Base HTML template file: users/{user_id}/templates/{template_id}/{template_id}.html
+    - Generated Reports folder: users/{user_id}/reports/{report_id}.pdf
+
+Validation Rules:
+  - Template upload:
+    - File must be valid PDF format
+    - File size must not exceed 10MB
+    - PDF must contain at least one page
+  - Variable mapping:
+    - Each variable must map to a valid bounding box ID
+    - Each variable must have a unique ID
+  - Form input:
+    - All required fields must be completed
+
+Error Handling:
+  - Textract analysis failure:
+    - Retry up to 3 times with exponential backoff
+    - If all retries fail, notify user and mark template as failed
+  - Missing bounding box during merge:
+    - Log warning with bounding box ID and variable name
+    - Skip the field replacement but continue processing
+    - Include warning in final report metadata
+  - PDF generation failure:
+    - Attempt to diagnose HTML rendering issues
+    - Provide user with error message and HTML preview option
+    - Store failed HTML in S3 for debugging
+  - S3 storage failure:
+    - Retry operation up to 3 times
+    - If persistent, notify user and abort operation
+    - Clean up any partially uploaded files
+
+Security Considerations:
+  - All S3 objects use server-side encryption (SSE-S3)
+  - Pre-signed URLs expire after 15 minutes
+  - User can only access their own templates and reports
+  - PDF content is sanitized before processing to prevent XSS
+  - Input validation prevents injection attacks

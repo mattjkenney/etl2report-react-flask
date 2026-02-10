@@ -5,10 +5,12 @@ import newTemplateReducer from './dash/actions/newTemplate.js'
 import pdfViewerReducer from './dash/pdfViewer.js'
 import messagesReducer from './messages.js'
 import templatesReducer from './dash/templates.js'
+import reportsReducer from './dash/reports.js'
 import viewReducer from './dash/view.js'
-import manualInputReducer from './dash/manualInput.js'
+import variablesReducer from './dash/variables.js'
 import variableContainersReducer from './dash/variableContainers.js'
 import boxBindingsReducer from './dash/boxBindings.js'
+import previewValuesReducer from './dash/previewValues.js'
 
 export const store = configureStore({
   reducer: {
@@ -18,10 +20,12 @@ export const store = configureStore({
     pdfViewer: pdfViewerReducer,
     messages: messagesReducer,
     templates: templatesReducer,
+    reports: reportsReducer,
     view: viewReducer,
-    manualInput: manualInputReducer,
+    variables: variablesReducer,
     variableContainers: variableContainersReducer,
     boxBindings: boxBindingsReducer,
+    previewValues: previewValuesReducer,
   },
 })
 
