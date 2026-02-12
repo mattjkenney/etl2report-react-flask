@@ -435,8 +435,8 @@ class TestGetTextractResultsFromS3:
         mock_list_lambda.return_value = {
             'success': True,
             'files': [
-                {'file_name': 'result1.json', 'key': f'users/{test_user_id}/textract/template1/result1.json'},
-                {'file_name': 'result2.json', 'key': f'users/{test_user_id}/textract/template1/result2.json'}
+                {'file_name': 'result1.json', 'key': f'users/{test_user_id}/templates/template1/textract-jobs/result1.json'},
+                {'file_name': 'result2.json', 'key': f'users/{test_user_id}/templates/template1/textract-jobs/result2.json'}
             ]
         }
         
@@ -520,7 +520,7 @@ class TestGetTextractResultsFromS3:
         mock_list_lambda.return_value = {
             'success': True,
             'files': [
-                {'file_name': 'result1.json', 'key': f'users/{test_user_id}/textract/template1/result1.json'}
+                {'file_name': 'result1.json', 'key': f'users/{test_user_id}/templates/template1/textract-jobs/result1.json'}
             ]
         }
         mock_presigned_lambda.return_value = {

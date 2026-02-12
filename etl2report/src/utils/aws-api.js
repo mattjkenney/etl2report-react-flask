@@ -10,30 +10,24 @@ async function getAuthSession() {
         // Get the JWT token
         const token = session.tokens.idToken;
         const jwtToken = token.toString();
-        
-        // Log token details for debugging (don't log in production)
-        // console.log('Auth Debug:', {
-        //     tokenExists: !!jwtToken,
-        //     tokenLength: jwtToken.length,
-        //     tokenStart: jwtToken.substring(0, 10) + '...',
-        //     sub: token.payload.sub,
-        //     idtoken: jwtToken
-        // });
 
         return {
             token: jwtToken,
             sub: token.payload.sub
         };
     } catch (error) {
-        // console.error('Error getting auth session:', error);
+        console.error('Error getting auth session:', error);
         throw new Error('Failed to get authentication token: ' + error.message);
     }
 }
 
 export async function uploadFile(file, bucketName, key, description = '') {
     try {
+        console.log('uploadFile called with:', { fileName: file?.name, bucketName, key, description });
+        
         // Get the auth session details
         const { token } = await getAuthSession();
+        console.log('Got auth token, length:', token?.length);
         
         // Validate required parameters
         if (!token) {
@@ -63,6 +57,11 @@ export async function uploadFile(file, bucketName, key, description = '') {
             formData.append('description', description);
         }
 
+        console.log('Making fetch request to:', apiEndpoint);
+        console.log('FormData entries:', Array.from(formData.entries()).map(([k, v]) => 
+            k === 'file' ? [k, `File: ${v.name}`] : [k, v]
+        ));
+        
         // Upload to backend
         const response = await fetch(apiEndpoint, {
             method: 'POST',
@@ -72,8 +71,15 @@ export async function uploadFile(file, bucketName, key, description = '') {
             body: formData
         }).catch(err => {
             // Network error - couldn't reach the API endpoint
+            console.error('Fetch error details:', {
+                name: err.name,
+                message: err.message,
+                stack: err.stack
+            });
             throw new Error(`Network error: Could not reach API endpoint at ${apiEndpoint}. ${err.message}`);
         });
+
+        console.log('Fetch response received:', { ok: response.ok, status: response.status, statusText: response.statusText });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
@@ -165,14 +171,15 @@ export async function startTextractAnalysis(bucket, key, outputBucket, outputKey
 /**
  * Poll Textract job until completion and retrieve all results with pagination.
  * Server-side polling reduces frontend network calls and complexity.
+ * Textract document analysis typically takes 2-5 minutes to complete.
  * 
  * @param {string} jobId - The Textract job ID
- * @param {number} pollInterval - Polling interval in milliseconds (default: 5000)
- * @param {number} maxAttempts - Maximum number of polling attempts (default: 60)
+ * @param {number} pollInterval - Polling interval in milliseconds (default: 10000 = 10 seconds)
+ * @param {number} maxAttempts - Maximum number of polling attempts (default: 60 = 10 minutes)
  * @param {function} onProgress - Optional callback for progress updates
  * @returns {Promise<Object>} Complete Textract results
  */
-export async function pollTextractResults(jobId, pollInterval = 5000, maxAttempts = 60, onProgress = null) {
+export async function pollTextractResults(jobId, pollInterval = 10000, maxAttempts = 60, onProgress = null) {
     try {
         // Get the auth session details
         const { token } = await getAuthSession();
@@ -190,15 +197,17 @@ export async function pollTextractResults(jobId, pollInterval = 5000, maxAttempt
         const apiEndpoint = `${backendEndpoint}/api/textract/poll-results`;
 
         // Note: Backend handles polling server-side, so this is a single call
-        // If onProgress callback is provided, we could implement client-side polling
-        // for progress updates, but for simplicity, we'll do a single call
+        // The backend will poll every `poll_interval` seconds for up to `max_attempts` times
+        // This may take several minutes for complex documents
+        
+        console.log(`Starting Textract polling (server-side): jobId=${jobId}, max wait time=${(pollInterval * maxAttempts) / 60000} minutes`);
         
         if (onProgress) {
             onProgress({
                 attempt: 0,
                 maxAttempts: maxAttempts,
                 jobStatus: 'IN_PROGRESS',
-                statusMessage: 'Polling for results (server-side)...'
+                statusMessage: 'Polling for results (server-side)... This may take several minutes.'
             });
         }
         

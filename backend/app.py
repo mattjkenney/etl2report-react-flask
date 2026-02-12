@@ -40,7 +40,7 @@ CORS(app, resources={
 })
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -398,6 +398,10 @@ def s3_upload():
             description=description
         )
         
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
         return jsonify(result), 200
         
     except S3OperationError as e:
@@ -453,6 +457,10 @@ def s3_list_objects():
             list_files=list_files,
             auth_token=auth_token
         )
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
         
         return jsonify(result), 200
         
@@ -520,6 +528,10 @@ def s3_presigned_url():
             expiration=expiration
         )
         
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
         return jsonify(result), 200
         
     except S3OperationError as e:
@@ -578,6 +590,10 @@ def s3_fetch_html_template():
             auth_token=auth_token
         )
         
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
         return jsonify(result), 200
         
     except S3OperationError as e:
@@ -629,7 +645,7 @@ def textract_start_analysis():
         bucket = data.get('bucket') or os.getenv('S3_BUCKET')
         key = data.get('key')
         output_bucket = data.get('output_bucket') or bucket
-        output_key_prefix = data.get('output_key_prefix', 'textract/')
+        output_key_prefix = data.get('output_key_prefix') or 'textract/'
         
         if not bucket or not key:
             return jsonify({'error': 'Missing required fields: bucket, key'}), 400
@@ -642,6 +658,10 @@ def textract_start_analysis():
             output_key_prefix=output_key_prefix,
             auth_token=auth_token
         )
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
         
         return jsonify(result), 200
         
@@ -701,6 +721,10 @@ def textract_get_results():
             next_token=next_token
         )
         
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
         return jsonify(result), 200
         
     except TextractOperationError as e:
@@ -719,7 +743,7 @@ def textract_poll_results():
     Request body:
         {
             "job_id": "abc123...",
-            "poll_interval": 5,  // Optional, seconds (default 5)
+            "poll_interval": 5000,  // Optional, milliseconds (default 5000ms = 5s)
             "max_attempts": 60  // Optional, (default 60)
         }
     
@@ -750,11 +774,18 @@ def textract_poll_results():
         data = request.get_json()
         
         job_id = data.get('job_id')
-        poll_interval = data.get('poll_interval', 5)
+        poll_interval = data.get('poll_interval', 10)
         max_attempts = data.get('max_attempts', 60)
+        
+        # Convert poll_interval from milliseconds to seconds if needed
+        # Frontend sends milliseconds, but backend expects seconds
+        if poll_interval > 100:  # Assume milliseconds if > 100
+            poll_interval = poll_interval / 1000.0
         
         if not job_id:
             return jsonify({'error': 'Missing required field: job_id'}), 400
+        
+        logger.info(f"Starting Textract polling for job_id: {job_id}, poll_interval: {poll_interval}s, max_attempts: {max_attempts}")
         
         # Poll results (server-side)
         result = poll_textract_results(
@@ -763,6 +794,12 @@ def textract_poll_results():
             poll_interval=poll_interval,
             max_attempts=max_attempts
         )
+        
+        logger.info(f"Polling completed. Result keys: {result.keys()}, status: {result.get('job_status')}")
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
         
         return jsonify(result), 200
         
@@ -822,6 +859,10 @@ def textract_get_results_from_s3():
             template_name=template_name,
             auth_token=auth_token
         )
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
         
         return jsonify(result), 200
         

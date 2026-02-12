@@ -13,7 +13,7 @@ S3 Path Structure:
     users/{user_id}/templates/     - HTML templates
     users/{user_id}/pdfs/          - PDF files
     users/{user_id}/reports/       - Generated reports
-    users/{user_id}/textract/      - Textract results
+    users/{user_id}/templates/{template_id}/textract-jobs/  - Textract results
 """
 
 import requests
@@ -85,11 +85,14 @@ def upload_file_to_s3(bucket, key, file_data, content_type, auth_token, user_id=
             content_type=content_type
         )
         
-        if not presigned_response.get('success'):
-            raise S3OperationError("Failed to get presigned URL for upload")
-        
-        presigned_url = presigned_response.get('presigned_url')
+        # Check for presignedUrl in response (camelCase from Lambda)
+        presigned_url = presigned_response.get('presignedUrl')
         if not presigned_url:
+            # Try snake_case as fallback
+            presigned_url = presigned_response.get('presigned_url')
+        
+        if not presigned_url:
+            logger.error(f"Presigned URL not found in response: {presigned_response}")
             raise S3OperationError("Presigned URL not found in response")
         
         # Upload file to S3 using presigned URL
@@ -184,9 +187,7 @@ def list_s3_objects(bucket, prefix, list_files, auth_token, user_id=None):
             auth_token=auth_token
         )
         
-        if not response.get('success'):
-            raise S3OperationError("Failed to list S3 objects")
-        
+        # Lambda returns data directly (errors would have raised ApiGatewayClientError)
         return response
         
     except ApiGatewayClientError as e:
@@ -244,10 +245,17 @@ def get_presigned_url(bucket, key, method, auth_token, user_id=None, content_typ
             expiration=expiration
         )
         
-        if not response.get('success'):
-            raise S3OperationError("Failed to generate presigned URL")
+        # Lambda returns camelCase, normalize to snake_case for consistency
+        normalized_response = {
+            'success': True,
+            'presigned_url': response.get('presignedUrl'),
+            'bucket': response.get('bucket'),
+            'key': response.get('key'),
+            'method': response.get('method'),
+            'expires_in': response.get('expiresIn')
+        }
         
-        return response
+        return normalized_response
         
     except ApiGatewayClientError as e:
         logger.error(f"API Gateway error getting presigned URL: {str(e)}")
@@ -304,11 +312,14 @@ def fetch_html_template(bucket, template_name, auth_token, user_id=None):
             auth_token=auth_token
         )
         
-        if not presigned_response.get('success'):
-            raise S3OperationError("Failed to get presigned URL for template")
-        
-        presigned_url = presigned_response.get('presigned_url')
+        # Check for presignedUrl in response (camelCase from Lambda)
+        presigned_url = presigned_response.get('presignedUrl')
         if not presigned_url:
+            # Try snake_case as fallback
+            presigned_url = presigned_response.get('presigned_url')
+        
+        if not presigned_url:
+            logger.error(f"Presigned URL not found in response: {presigned_response}")
             raise S3OperationError("Presigned URL not found in response")
         
         # Fetch HTML content from S3

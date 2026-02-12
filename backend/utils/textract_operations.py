@@ -63,9 +63,21 @@ def start_textract_analysis(bucket, key, output_bucket, output_key_prefix, auth_
         if not user_id:
             user_id = extract_user_id(auth_token)
         
+        # Validate required parameters
+        if not key:
+            raise TextractOperationError("S3 key is required")
+        if not bucket:
+            raise TextractOperationError("S3 bucket is required")
+        if not output_bucket:
+            raise TextractOperationError("Output bucket is required")
+        
         # Build full S3 keys with user prefix if not already included
         if not key.startswith(f'users/{user_id}/'):
             key = f'users/{user_id}/{key}'
+        
+        # Handle None or empty output_key_prefix
+        if not output_key_prefix:
+            output_key_prefix = 'textract/'
         
         if not output_key_prefix.startswith(f'users/{user_id}/'):
             output_key_prefix = f'users/{user_id}/{output_key_prefix}'
@@ -81,16 +93,26 @@ def start_textract_analysis(bucket, key, output_bucket, output_key_prefix, auth_
             auth_token=auth_token
         )
         
-        if not response.get('success'):
-            raise TextractOperationError("Failed to start Textract analysis")
-        
-        job_id = response.get('job_id')
+        # Lambda returns data directly (errors would have raised ApiGatewayClientError)
+        # Check for jobId (camelCase from Lambda)
+        job_id = response.get('jobId') or response.get('job_id')
         if not job_id:
+            logger.error(f"No jobId in response: {response}")
             raise TextractOperationError("No job_id returned from Textract")
         
         logger.info(f"Textract job started: {job_id}")
         
-        return response
+        # Normalize response to snake_case for Flask API consistency
+        return {
+            'success': True,
+            'job_id': job_id,
+            'status': response.get('status', 'IN_PROGRESS'),
+            'output_location': response.get('outputLocation') or response.get('output_location'),
+            'document': {
+                'bucket': bucket,
+                'key': key
+            }
+        }
         
     except ApiGatewayClientError as e:
         logger.error(f"API Gateway error starting Textract: {str(e)}")
@@ -135,13 +157,40 @@ def get_textract_results(job_id, auth_token, next_token=None):
             next_token=next_token
         )
         
-        if not response.get('success'):
-            raise TextractOperationError("Failed to get Textract results")
-        
-        job_status = response.get('job_status')
+        # Lambda returns data directly (errors would have raised ApiGatewayClientError)
+        # Check for jobStatus (camelCase from Lambda)
+        job_status = response.get('jobStatus') or response.get('job_status')
         logger.info(f"Textract job status: {job_status}")
         
-        return response
+        # Normalize response to snake_case for Flask API consistency
+        normalized_response = {
+            'success': True,
+            'job_status': job_status,
+            'status_message': response.get('statusMessage') or response.get('status_message'),
+        }
+        
+        # Add optional fields if present
+        if 'blocks' in response or 'Blocks' in response:
+            normalized_response['blocks'] = response.get('blocks') or response.get('Blocks', [])
+        
+        if 'documentMetadata' in response or 'document_metadata' in response or 'DocumentMetadata' in response:
+            metadata = response.get('documentMetadata') or response.get('document_metadata') or response.get('DocumentMetadata')
+            if metadata:
+                normalized_response['document_metadata'] = {
+                    'pages': metadata.get('Pages') or metadata.get('pages', 0)
+                }
+        
+        if 'nextToken' in response or 'next_token' in response:
+            next_token_val = response.get('nextToken') or response.get('next_token')
+            if next_token_val:
+                normalized_response['next_token'] = next_token_val
+                normalized_response['has_more_results'] = True
+            else:
+                normalized_response['has_more_results'] = False
+        else:
+            normalized_response['has_more_results'] = False
+        
+        return normalized_response
         
     except ApiGatewayClientError as e:
         logger.error(f"API Gateway error getting Textract results: {str(e)}")
@@ -151,7 +200,7 @@ def get_textract_results(job_id, auth_token, next_token=None):
         raise TextractOperationError(f"Get results failed: {str(e)}")
 
 
-def poll_textract_results(job_id, auth_token, poll_interval=5, max_attempts=60):
+def poll_textract_results(job_id, auth_token, poll_interval=10, max_attempts=60):
     """
     Poll Textract results until completion (server-side polling).
     
@@ -162,8 +211,8 @@ def poll_textract_results(job_id, auth_token, poll_interval=5, max_attempts=60):
     Args:
         job_id (str): Textract job ID
         auth_token (str): JWT token
-        poll_interval (int): Seconds between polling attempts (default 5)
-        max_attempts (int): Maximum polling attempts (default 60 = 5 minutes)
+        poll_interval (int): Seconds between polling attempts (default 10)
+        max_attempts (int): Maximum polling attempts (default 60 = 10 minutes)
         
     Returns:
         dict: Complete job results
@@ -191,10 +240,17 @@ def poll_textract_results(job_id, auth_token, poll_interval=5, max_attempts=60):
             attempts += 1
             
             # Get current status and results
+            elapsed = time.time() - start_time
+            logger.info(f"Poll attempt {attempts}/{max_attempts} (elapsed: {elapsed:.1f}s): Calling get_textract_results...")
             response = get_textract_results(job_id, auth_token)
             job_status = response.get('job_status')
             
-            logger.info(f"Poll attempt {attempts}/{max_attempts}: Status = {job_status}")
+            if not job_status:
+                logger.error(f"No job_status in response: {response}")
+                raise TextractOperationError("Missing job_status in Textract response")
+            
+            logger.info(f"Poll attempt {attempts}/{max_attempts} (elapsed: {elapsed:.1f}s): Status = {job_status}")
+            logger.debug(f"Full response: {response}")
             
             # Check if job is complete
             if job_status == 'SUCCEEDED':
@@ -234,10 +290,13 @@ def poll_textract_results(job_id, auth_token, poll_interval=5, max_attempts=60):
             
             elif job_status == 'IN_PROGRESS':
                 # Wait before next poll
+                logger.info(f"Job still in progress, waiting {poll_interval} seconds before next poll...")
                 if attempts < max_attempts:
                     time.sleep(poll_interval)
+                    logger.info(f"Resuming polling (attempt {attempts + 1}/{max_attempts})...")
             
             else:
+                logger.error(f"Unknown job status: {job_status}")
                 raise TextractOperationError(f"Unknown job status: {job_status}")
         
         # Max attempts reached
@@ -285,9 +344,9 @@ def get_textract_results_from_s3(bucket, template_name, auth_token, user_id=None
             user_id = extract_user_id(auth_token)
         
         # Build textract results folder path
-        # Assuming structure: users/{user_id}/textract/{template_name}/
+        # Structure: users/{user_id}/templates/{template_id}/textract-jobs/
         template_folder = template_name.replace('.html', '').replace('.pdf', '')
-        textract_prefix = f'users/{user_id}/textract/{template_folder}/'
+        textract_prefix = f'users/{user_id}/templates/{template_folder}/textract-jobs/'
         
         logger.info(f"Fetching Textract results from S3: {bucket}/{textract_prefix}")
         
@@ -299,9 +358,7 @@ def get_textract_results_from_s3(bucket, template_name, auth_token, user_id=None
             auth_token=auth_token
         )
         
-        if not list_response.get('success'):
-            raise TextractOperationError("Failed to list Textract result files")
-        
+        # Lambda returns data directly (errors would have raised ApiGatewayClientError)
         files = list_response.get('files', [])
         
         if not files:
@@ -337,11 +394,11 @@ def get_textract_results_from_s3(bucket, template_name, auth_token, user_id=None
                 auth_token=auth_token
             )
             
-            if not presigned_response.get('success'):
+            # Check for presignedUrl (camelCase from Lambda)
+            presigned_url = presigned_response.get('presignedUrl') or presigned_response.get('presigned_url')
+            if not presigned_url:
                 logger.warning(f"Failed to get presigned URL for {file_name}")
                 continue
-            
-            presigned_url = presigned_response.get('presigned_url')
             
             # Download file content
             try:

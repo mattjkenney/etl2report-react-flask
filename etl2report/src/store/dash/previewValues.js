@@ -1,4 +1,4 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, createSelector } from '@reduxjs/toolkit';
 
 const initialState = {
     // Maps inputId to its formatted preview value
@@ -120,9 +120,11 @@ export const selectAllBoxMappings = (state) => {
 };
 
 // Get all box IDs that have values mapped
-export const selectMappedBoxIds = (state) => {
-    return Object.keys(state.previewValues.boxToValueMap);
-};
+// Memoized to prevent creating a new array on every call
+export const selectMappedBoxIds = createSelector(
+    [(state) => state.previewValues.boxToValueMap],
+    (boxToValueMap) => Object.keys(boxToValueMap)
+);
 
 // Check if a box has a value mapped
 export const selectIsBoxMapped = (state, boxId) => {

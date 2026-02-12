@@ -18,6 +18,7 @@ Authentication:
 import requests
 import logging
 import os
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,19 @@ def _make_api_request(endpoint, method, data, auth_token, timeout=30):
         # Try to parse JSON response
         try:
             response_data = response.json()
+            logger.debug(f"API Gateway response data: {response_data}")
+            
+            # Handle Lambda proxy response format (if API Gateway returns the full Lambda response)
+            # Lambda proxy returns: {"statusCode": 200, "body": "{...}", "headers": {...}}
+            if isinstance(response_data, dict) and 'body' in response_data and 'statusCode' in response_data:
+                logger.debug("Detected Lambda proxy response format, unwrapping body")
+                # Parse the body string
+                if isinstance(response_data['body'], str):
+                    response_data = json.loads(response_data['body'])
+                else:
+                    response_data = response_data['body']
+                logger.debug(f"Unwrapped response data: {response_data}")
+                
         except ValueError:
             response_data = {'error': 'Invalid JSON response', 'text': response.text}
         
@@ -129,7 +143,7 @@ def call_s3_presigned_url_lambda(bucket, key, method, auth_token, content_type=N
     }
     
     if content_type and method.lower() == 'put':
-        request_body['content_type'] = content_type
+        request_body['contentType'] = content_type
     
     return _make_api_request(endpoint, 'POST', request_body, auth_token)
 
@@ -210,8 +224,8 @@ def call_textract_start_lambda(bucket, key, output_bucket, output_key_prefix, au
     request_body = {
         'bucket': bucket,
         'key': key,
-        'output_bucket': output_bucket,
-        'output_key_prefix': output_key_prefix
+        'outputBucket': output_bucket,
+        'outputKeyPrefix': output_key_prefix
     }
     
     return _make_api_request(endpoint, 'POST', request_body, auth_token)
@@ -245,11 +259,11 @@ def call_textract_get_results_lambda(job_id, auth_token, next_token=None):
     endpoint = os.getenv('API_GATEWAY_TEXTRACT_GET_RESULTS_ENDPOINT')
     
     request_body = {
-        'job_id': job_id
+        'jobId': job_id
     }
     
     if next_token:
-        request_body['next_token'] = next_token
+        request_body['nextToken'] = next_token
     
     return _make_api_request(endpoint, 'POST', request_body, auth_token, timeout=60)
 

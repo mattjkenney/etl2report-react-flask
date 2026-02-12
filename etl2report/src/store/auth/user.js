@@ -4,7 +4,7 @@ import { signIn, fetchAuthSession, signOut, getCurrentUser } from 'aws-amplify/a
 // Helper function to handle sign out
 const forceSignOut = async () => {
     try {
-        await signOut({ global: true });
+        await signOut();
     } catch (error) {
         console.log('Error during force sign out:', error);
     }
@@ -15,7 +15,7 @@ export const logoutUser = createAsyncThunk(
     'user/logoutUser',
     async (_, { rejectWithValue }) => {
         try {
-            await signOut({ global: true });
+            await signOut();
             return null;
         } catch (error) {
             return rejectWithValue(error.message);

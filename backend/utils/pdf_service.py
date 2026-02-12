@@ -36,43 +36,29 @@ def get_s3_presigned_url(
     Returns:
         Presigned URL string
     """
-    # Get API Gateway endpoint from environment
-    api_endpoint = os.getenv('S3_PRESIGNED_URL_API_ENDPOINT')
-    if not api_endpoint:
-        raise Exception('S3_PRESIGNED_URL_API_ENDPOINT not configured in environment')
+    from utils.api_gateway_client import call_s3_presigned_url_lambda
     
     if not auth_token:
         raise Exception('Authentication token is required')
     
-    # Prepare request body for Lambda
-    request_body = {
-        'bucket': bucket,
-        'key': key,
-        'method': s3_operation  # 'get' or 'put' for S3 operation
-    }
-    
-    if s3_operation == 'put' and content_type:
-        request_body['contentType'] = content_type
-    
-    # Call API Gateway with POST method
-    headers = {
-        'Authorization': f'Bearer {auth_token}',
-        'Content-Type': 'application/json'
-    }
-    
     try:
-        response = requests.post(api_endpoint, json=request_body, headers=headers)
-        response.raise_for_status()
+        # Use api_gateway_client to call Lambda function
+        response = call_s3_presigned_url_lambda(
+            bucket=bucket,
+            key=key,
+            method=s3_operation,
+            auth_token=auth_token,
+            content_type=content_type
+        )
         
-        data = response.json()
-        presigned_url = data.get('presignedUrl')
+        presigned_url = response.get('presignedUrl') or response.get('presigned_url')
         
         if not presigned_url:
             raise Exception('No presigned URL returned from API Gateway')
         
         return presigned_url
     
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.error(f"Failed to get presigned URL from API Gateway: {str(e)}")
         raise Exception(f"Failed to get presigned URL: {str(e)}")
 

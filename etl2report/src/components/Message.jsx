@@ -8,19 +8,14 @@ export default function Message({ message, isError, onClose }) {
             <Button
                 displayText={message}
                 variant={isError ? 'error-message' : 'success-message'}
-                prefix={
-                    <>
-                        <Button 
-                            onClick={onClose}
-                            variant='ghost'                         size="small"
-                            displayText="×"
-                            className="ml-4 font-bold text-xl leading-none"
-                            aria-label="Close message"
-                        />
-                        &nbsp;
-                    </>
-                }
-                    
+            />
+            <Button 
+                onClick={onClose}
+                variant='ghost'
+                size="small"
+                displayText="×"
+                className="ml-4 font-bold text-xl leading-none"
+                aria-label="Close message"
             />
         </div>
     );

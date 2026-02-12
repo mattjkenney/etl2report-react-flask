@@ -101,7 +101,7 @@ def mock_textract_start_response():
         'success': True,
         'job_id': 'test-job-abc123',
         'status': 'IN_PROGRESS',
-        'output_location': 's3://test-bucket/users/test-user-123/textract/test-job-abc123/',
+        'output_location': 's3://test-bucket/users/test-user-123/templates/test-template/textract-jobs/',
         'document': {
             'bucket': 'test-bucket',
             'key': 'users/test-user-123/pdfs/test.pdf'

@@ -4,6 +4,7 @@ from typing import Dict
 from botocore.exceptions import ClientError
 from bs4 import BeautifulSoup
 import logging
+from utils.api_gateway_client import call_s3_presigned_url_lambda
 
 logger = logging.getLogger(__name__)
 
@@ -21,27 +22,18 @@ def fetch_html_template_from_s3(bucket: str, template_id: str, auth_token: str) 
             raise Exception("user_sub not found in token")
         s3_key = f"users/{user_sub}/templates/{template_id}/{template_id}.html"
 
-        # Get presigned URL from internal API
-        api_endpoint = os.getenv('S3_PRESIGNED_URL_API_ENDPOINT')
-        if not api_endpoint:
-            raise Exception("S3_PRESIGNED_URL_API_ENDPOINT not set in environment")
-
-        headers = {
-            'Authorization': f'Bearer {auth_token}',
-            'Content-Type': 'application/json'
-        }
-        body = {
-            'bucket': bucket,
-            'key': s3_key,
-            'method': 'get'
-        }
-        presigned_resp = requests.post(api_endpoint, headers=headers, json=body)
-        if presigned_resp.status_code != 200:
-            logger.error(f"Failed to get presigned URL: {presigned_resp.status_code} {presigned_resp.text}")
-            raise Exception(f"Failed to get presigned URL: {presigned_resp.status_code}")
-        data = presigned_resp.json()
-        presigned_url = data.get('presignedUrl') or data.get('presigned_url')
+        # Get presigned URL using api_gateway_client
+        presigned_response = call_s3_presigned_url_lambda(
+            bucket=bucket,
+            key=s3_key,
+            method='get',
+            auth_token=auth_token
+        )
+        
+        # Extract presigned URL from response
+        presigned_url = presigned_response.get('presignedUrl') or presigned_response.get('presigned_url')
         if not presigned_url:
+            logger.error(f"No presigned URL in response: {presigned_response}")
             raise Exception("No presigned URL returned from server")
 
         # Download HTML content

@@ -114,24 +114,27 @@ export default function NewTemplate() {
 
             // Start Textract analysis on the uploaded file
             const outputBucket = bucketName; // Use the same bucket for Textract output
+            const outputKeyPrefix = `templates/${templateNameClean}/textract-jobs/`;
             
             const textractResponse = await startTextractAnalysis(
                 uploadResponse.bucket,
                 uploadResponse.key,
-                outputBucket
+                outputBucket,
+                outputKeyPrefix
             );
 
             dispatch(addMessage({
                 id: `${Date.now()}-textract-start`,
-                message: `Textract analysis started (Job ID: ${textractResponse.jobId}). Processing document...`,
+                message: `Textract analysis started (Job ID: ${textractResponse.jobId}). Processing document... This typically takes 2-5 minutes.`,
                 isError: false
             }));
 
             // Poll for Textract results
+            // Textract typically takes 2-5 minutes for document analysis
             const textractResults = await pollTextractResults(
                 textractResponse.jobId,
-                5000, // Poll every 5 seconds
-                60,   // Max 60 attempts (5 minutes)
+                10000, // Poll every 10 seconds
+                60,    // Max 60 attempts (10 minutes total)
                 (progress) => {
                     // Update user on progress
                     console.log('Textract progress:', progress);
