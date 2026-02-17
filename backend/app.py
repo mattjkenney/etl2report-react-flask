@@ -17,10 +17,15 @@ from utils.html_generator import generate_html_from_textract
 # Initialize Flask app
 app = Flask(__name__)
 
+# Get allowed frontend origins from environment variable
+# For development: use localhost URLs
+# For production: use your deployed frontend URL (comma-separated for multiple origins)
+frontend_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',')
+
 # Configure CORS for React frontend
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+        "origins": frontend_origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": [
             "Content-Type",
@@ -35,7 +40,7 @@ CORS(app, resources={
 })
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -307,6 +312,567 @@ def convert_pdf_to_html():
 # HTML-based report generation endpoint
 from utils.html_service import fetch_html_template_from_s3, replace_html_elements_by_block_id, convert_html_to_pdf_playwright
 import asyncio
+
+# Import new proxy operation modules
+from utils.s3_operations import (
+    upload_file_to_s3,
+    list_s3_objects,
+    get_presigned_url,
+    fetch_html_template,
+    S3OperationError
+)
+from utils.textract_operations import (
+    start_textract_analysis,
+    get_textract_results,
+    poll_textract_results,
+    get_textract_results_from_s3,
+    TextractOperationError
+)
+from utils.jwt_helper import extract_token_from_header
+
+
+# ==========================================
+# S3 PROXY ENDPOINTS
+# ==========================================
+
+@app.route('/api/s3/upload', methods=['POST'])
+def s3_upload():
+    """
+    Upload file to S3.
+    
+    Request body (multipart/form-data):
+        - file: File to upload
+        - bucket: S3 bucket name (optional, uses env default)
+        - key: S3 object key (will be prefixed with users/{user_id}/)
+        - description: File description (optional)
+    
+    Headers:
+        Authorization: Bearer <JWT token>
+    
+    Returns:
+        {
+            "success": true,
+            "message": "File uploaded successfully",
+            "bucket": "my-bucket",
+            "key": "users/user123/file.pdf",
+            "file_name": "file.pdf",
+            "size": 12345
+        }
+    """
+    try:
+        # Extract and validate auth token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'Missing Authorization header'}), 401
+        
+        auth_token = extract_token_from_header(auth_header)
+        
+        # Get file from request
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'error': 'Empty filename'}), 400
+        
+        # Get parameters from form data
+        bucket = request.form.get('bucket') or os.getenv('S3_BUCKET')
+        key = request.form.get('key') or file.filename
+        description = request.form.get('description')
+        content_type = file.content_type or 'application/octet-stream'
+        
+        if not bucket:
+            return jsonify({'error': 'S3 bucket not configured'}), 500
+        
+        # Read file data
+        file_data = file.read()
+        
+        # Upload to S3
+        result = upload_file_to_s3(
+            bucket=bucket,
+            key=key,
+            file_data=file_data,
+            content_type=content_type,
+            auth_token=auth_token,
+            description=description
+        )
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
+        return jsonify(result), 200
+        
+    except S3OperationError as e:
+        logger.error(f"S3 upload error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error in s3_upload: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/s3/list-objects', methods=['POST'])
+def s3_list_objects():
+    """
+    List folders or files in S3 bucket.
+    
+    Request body:
+        {
+            "bucket": "my-bucket",
+            "parent_folder": "templates/",  // Optional, will be prefixed with users/{user_id}/
+            "list_files": false  // true for files, false for folders
+        }
+    
+    Headers:
+        Authorization: Bearer <JWT token>
+    
+    Returns:
+        {
+            "success": true,
+            "folders": ["templates/", "reports/"]  // or "files": [...]
+        }
+    """
+    try:
+        # Extract and validate auth token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'Missing Authorization header'}), 401
+        
+        auth_token = extract_token_from_header(auth_header)
+        
+        data = request.get_json()
+        
+        bucket = data.get('bucket') or os.getenv('S3_BUCKET')
+        parent_folder = data.get('parent_folder', '')
+        list_files = data.get('list_files', False)
+        
+        if not bucket:
+            return jsonify({'error': 'S3 bucket not configured'}), 500
+        
+        # List objects
+        result = list_s3_objects(
+            bucket=bucket,
+            prefix=parent_folder,
+            list_files=list_files,
+            auth_token=auth_token
+        )
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
+        return jsonify(result), 200
+        
+    except S3OperationError as e:
+        logger.error(f"S3 list error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error in s3_list_objects: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/s3/presigned-url', methods=['POST'])
+def s3_presigned_url():
+    """
+    Generate presigned URL for S3 operations.
+    
+    Request body:
+        {
+            "bucket": "my-bucket",
+            "key": "file.pdf",  // Will be prefixed with users/{user_id}/
+            "method": "get",  // "get" or "put"
+            "content_type": "application/pdf",  // Optional, for put
+            "expiration": 3600  // Optional, seconds
+        }
+    
+    Headers:
+        Authorization: Bearer <JWT token>
+    
+    Returns:
+        {
+            "success": true,
+            "presigned_url": "https://s3.amazonaws.com/...",
+            "bucket": "my-bucket",
+            "key": "users/user123/file.pdf",
+            "method": "get",
+            "expires_in": 3600
+        }
+    """
+    try:
+        # Extract and validate auth token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'Missing Authorization header'}), 401
+        
+        auth_token = extract_token_from_header(auth_header)
+        
+        data = request.get_json()
+        
+        bucket = data.get('bucket') or os.getenv('S3_BUCKET')
+        key = data.get('key')
+        method = data.get('method', 'get')
+        content_type = data.get('content_type')
+        expiration = data.get('expiration', 3600)
+        
+        if not bucket or not key:
+            return jsonify({'error': 'Missing required fields: bucket, key'}), 400
+        
+        # Get presigned URL
+        result = get_presigned_url(
+            bucket=bucket,
+            key=key,
+            method=method,
+            auth_token=auth_token,
+            content_type=content_type,
+            expiration=expiration
+        )
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
+        return jsonify(result), 200
+        
+    except S3OperationError as e:
+        logger.error(f"S3 presigned URL error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error in s3_presigned_url: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/s3/fetch-html-template', methods=['POST'])
+def s3_fetch_html_template():
+    """
+    Fetch HTML template from S3.
+    
+    Request body:
+        {
+            "template_name": "template1.html",
+            "bucket": "my-bucket"  // Optional, uses env default
+        }
+    
+    Headers:
+        Authorization: Bearer <JWT token>
+    
+    Returns:
+        {
+            "success": true,
+            "html_content": "<html>...</html>",
+            "template_name": "template1.html",
+            "size": 12345
+        }
+    """
+    try:
+        # Extract and validate auth token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'Missing Authorization header'}), 401
+        
+        auth_token = extract_token_from_header(auth_header)
+        
+        data = request.get_json()
+        
+        template_name = data.get('template_name')
+        bucket = data.get('bucket') or os.getenv('S3_BUCKET')
+        
+        if not template_name:
+            return jsonify({'error': 'Missing required field: template_name'}), 400
+        
+        if not bucket:
+            return jsonify({'error': 'S3 bucket not configured'}), 500
+        
+        # Fetch template
+        result = fetch_html_template(
+            bucket=bucket,
+            template_name=template_name,
+            auth_token=auth_token
+        )
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
+        return jsonify(result), 200
+        
+    except S3OperationError as e:
+        logger.error(f"Fetch template error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error in s3_fetch_html_template: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ==========================================
+# TEXTRACT PROXY ENDPOINTS
+# ==========================================
+
+@app.route('/api/textract/start-analysis', methods=['POST'])
+def textract_start_analysis():
+    """
+    Start Textract document analysis.
+    
+    Request body:
+        {
+            "bucket": "my-bucket",
+            "key": "file.pdf",  // Will be prefixed with users/{user_id}/
+            "output_bucket": "my-bucket",  // Optional, defaults to bucket
+            "output_key_prefix": "textract/"  // Optional, will be prefixed with users/{user_id}/
+        }
+    
+    Headers:
+        Authorization: Bearer <JWT token>
+    
+    Returns:
+        {
+            "success": true,
+            "job_id": "abc123...",
+            "status": "IN_PROGRESS",
+            "output_location": "s3://bucket/prefix/"
+        }
+    """
+    try:
+        # Extract and validate auth token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'Missing Authorization header'}), 401
+        
+        auth_token = extract_token_from_header(auth_header)
+        
+        data = request.get_json()
+        
+        bucket = data.get('bucket') or os.getenv('S3_BUCKET')
+        key = data.get('key')
+        output_bucket = data.get('output_bucket') or bucket
+        output_key_prefix = data.get('output_key_prefix') or 'textract/'
+        
+        if not bucket or not key:
+            return jsonify({'error': 'Missing required fields: bucket, key'}), 400
+        
+        # Start Textract analysis
+        result = start_textract_analysis(
+            bucket=bucket,
+            key=key,
+            output_bucket=output_bucket,
+            output_key_prefix=output_key_prefix,
+            auth_token=auth_token
+        )
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
+        return jsonify(result), 200
+        
+    except TextractOperationError as e:
+        logger.error(f"Textract start error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error in textract_start_analysis: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/textract/get-results', methods=['POST'])
+def textract_get_results():
+    """
+    Get Textract analysis results (single call).
+    
+    Request body:
+        {
+            "job_id": "abc123...",
+            "next_token": "..."  // Optional, for pagination
+        }
+    
+    Headers:
+        Authorization: Bearer <JWT token>
+    
+    Returns:
+        {
+            "success": true,
+            "job_status": "SUCCEEDED",
+            "status_message": "Analysis completed",
+            "blocks": [...],
+            "document_metadata": {...},
+            "next_token": "...",  // Optional
+            "has_more_results": false
+        }
+    """
+    try:
+        # Extract and validate auth token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'Missing Authorization header'}), 401
+        
+        auth_token = extract_token_from_header(auth_header)
+        
+        data = request.get_json()
+        
+        job_id = data.get('job_id')
+        next_token = data.get('next_token')
+        
+        if not job_id:
+            return jsonify({'error': 'Missing required field: job_id'}), 400
+        
+        # Get results
+        result = get_textract_results(
+            job_id=job_id,
+            auth_token=auth_token,
+            next_token=next_token
+        )
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
+        return jsonify(result), 200
+        
+    except TextractOperationError as e:
+        logger.error(f"Textract get results error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error in textract_get_results: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/textract/poll-results', methods=['POST'])
+def textract_poll_results():
+    """
+    Poll Textract results until completion (server-side polling).
+    
+    Request body:
+        {
+            "job_id": "abc123...",
+            "poll_interval": 5000,  // Optional, milliseconds (default 5000ms = 5s)
+            "max_attempts": 60  // Optional, (default 60)
+        }
+    
+    Headers:
+        Authorization: Bearer <JWT token>
+    
+    Returns:
+        {
+            "success": true,
+            "job_status": "SUCCEEDED",
+            "blocks": [...],  // All paginated results combined
+            "blocks_count": 1234,
+            "document_metadata": {...},
+            "polling_stats": {
+                "attempts": 12,
+                "duration_seconds": 60
+            }
+        }
+    """
+    try:
+        # Extract and validate auth token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'Missing Authorization header'}), 401
+        
+        auth_token = extract_token_from_header(auth_header)
+        
+        data = request.get_json()
+        
+        job_id = data.get('job_id')
+        poll_interval = data.get('poll_interval', 10)
+        max_attempts = data.get('max_attempts', 60)
+        
+        # Convert poll_interval from milliseconds to seconds if needed
+        # Frontend sends milliseconds, but backend expects seconds
+        if poll_interval > 100:  # Assume milliseconds if > 100
+            poll_interval = poll_interval / 1000.0
+        
+        if not job_id:
+            return jsonify({'error': 'Missing required field: job_id'}), 400
+        
+        logger.info(f"Starting Textract polling for job_id: {job_id}, poll_interval: {poll_interval}s, max_attempts: {max_attempts}")
+        
+        # Poll results (server-side)
+        result = poll_textract_results(
+            job_id=job_id,
+            auth_token=auth_token,
+            poll_interval=poll_interval,
+            max_attempts=max_attempts
+        )
+        
+        logger.info(f"Polling completed. Result keys: {result.keys()}, status: {result.get('job_status')}")
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
+        return jsonify(result), 200
+        
+    except TextractOperationError as e:
+        logger.error(f"Textract poll error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error in textract_poll_results: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/textract/get-results-from-s3', methods=['POST'])
+def textract_get_results_from_s3():
+    """
+    Fetch all Textract results from S3 for a template.
+    
+    Request body:
+        {
+            "bucket": "my-bucket",
+            "template_name": "template1"
+        }
+    
+    Headers:
+        Authorization: Bearer <JWT token>
+    
+    Returns:
+        {
+            "success": true,
+            "blocks": [...],  // Combined from all result files
+            "blocks_count": 5678,
+            "files_count": 3,
+            "file_names": ["result1.json", "result2.json"]
+        }
+    """
+    try:
+        # Extract and validate auth token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'Missing Authorization header'}), 401
+        
+        auth_token = extract_token_from_header(auth_header)
+        
+        data = request.get_json()
+        
+        bucket = data.get('bucket') or os.getenv('S3_BUCKET')
+        template_name = data.get('template_name')
+        
+        if not template_name:
+            return jsonify({'error': 'Missing required field: template_name'}), 400
+        
+        if not bucket:
+            return jsonify({'error': 'S3 bucket not configured'}), 500
+        
+        # Get results from S3
+        result = get_textract_results_from_s3(
+            bucket=bucket,
+            template_name=template_name,
+            auth_token=auth_token
+        )
+        
+        # Ensure success field is set
+        if 'success' not in result:
+            result['success'] = True
+        
+        return jsonify(result), 200
+        
+    except TextractOperationError as e:
+        logger.error(f"Textract S3 fetch error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error in textract_get_results_from_s3: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/report/generate-from-html', methods=['POST', 'OPTIONS'])
 def generate_report_from_html():

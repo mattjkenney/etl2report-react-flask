@@ -1,45 +1,3 @@
-// Fetch HTML template from S3 (for preview/validation)
-export async function fetchHtmlTemplate(templateName, bucket) {
-    // Get the auth session details
-    const { token, sub } = await getAuthSession();
-    if (!token) throw new Error('Authentication token is missing');
-    if (!sub) throw new Error('User ID (sub) is missing from token');
-    if (!templateName) throw new Error('Template name is required');
-    if (!bucket) throw new Error('Bucket name is required');
-
-    // Construct S3 key for HTML template
-    const s3Key = `users/${sub}/templates/${templateName}/${templateName}.html`;
-    const apiEndpoint = import.meta.env.VITE_AWS_S3_GET_API_ENDPOINT;
-    if (!apiEndpoint) throw new Error('API endpoint is not configured. Please check your environment variables.');
-
-    // Step 1: Get pre-signed URL from backend
-    const presignedUrlResponse = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            bucket: bucket,
-            key: s3Key,
-            method: 'get'
-        })
-    });
-    if (!presignedUrlResponse.ok) {
-        const errorText = await presignedUrlResponse.text();
-        throw new Error(`Failed to get pre-signed URL: ${presignedUrlResponse.status}. ${errorText}`);
-    }
-    const { presignedUrl } = await presignedUrlResponse.json();
-    if (!presignedUrl) throw new Error('No pre-signed URL returned from server');
-
-    // Step 2: Fetch HTML content
-    const htmlResponse = await fetch(presignedUrl);
-    if (!htmlResponse.ok) {
-        const errorText = await htmlResponse.text();
-        throw new Error(`Failed to fetch HTML template: ${htmlResponse.status}. ${errorText}`);
-    }
-    return await htmlResponse.text();
-}
 import { fetchAuthSession } from 'aws-amplify/auth';
 
 async function getAuthSession() {
@@ -52,37 +10,28 @@ async function getAuthSession() {
         // Get the JWT token
         const token = session.tokens.idToken;
         const jwtToken = token.toString();
-        
-        // Log token details for debugging (don't log in production)
-        // console.log('Auth Debug:', {
-        //     tokenExists: !!jwtToken,
-        //     tokenLength: jwtToken.length,
-        //     tokenStart: jwtToken.substring(0, 10) + '...',
-        //     sub: token.payload.sub,
-        //     idtoken: jwtToken
-        // });
 
         return {
             token: jwtToken,
             sub: token.payload.sub
         };
     } catch (error) {
-        // console.error('Error getting auth session:', error);
+        console.error('Error getting auth session:', error);
         throw new Error('Failed to get authentication token: ' + error.message);
     }
 }
 
 export async function uploadFile(file, bucketName, key, description = '') {
     try {
+        console.log('uploadFile called with:', { fileName: file?.name, bucketName, key, description });
+        
         // Get the auth session details
-        const { token, sub } = await getAuthSession();
+        const { token } = await getAuthSession();
+        console.log('Got auth token, length:', token?.length);
         
         // Validate required parameters
         if (!token) {
             throw new Error('Authentication token is missing');
-        }
-        if (!sub) {
-            throw new Error('User ID (sub) is missing from token');
         }
         if (!file) {
             throw new Error('File is required');
@@ -94,80 +43,62 @@ export async function uploadFile(file, bucketName, key, description = '') {
             throw new Error('Key is required');
         }
         
-        // Verify we have an API endpoint
-        const apiEndpoint = import.meta.env.VITE_AWS_S3_PUT_API_ENDPOINT;
-        if (!apiEndpoint) {
-            throw new Error('API endpoint is not configured. Please check your environment variables.');
+        // Get Flask backend endpoint
+        const backendEndpoint = import.meta.env.VITE_FLASK_BACKEND_URL || 'http://localhost:5000';
+        const apiEndpoint = `${backendEndpoint}/api/s3/upload`;
+
+        // Create form data for multipart upload
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('bucket', bucketName);
+        formData.append('key', key);
+        formData.append('content_type', file.type);
+        if (description) {
+            formData.append('description', description);
         }
 
-        // Construct S3 key with user prefix
-        const s3Key = `users/${sub}/${key}`;
-
-        // console.log('Requesting pre-signed URL:', {
-        //     fileSize: file.size,
-        //     fileName: file.name,
-        //     contentType: file.type,
-        //     key: s3Key,
-        //     bucket: bucketName,
-        //     endpoint: apiEndpoint,
-        //     metadata: metadata
-        // });
-
-        // Step 1: Get pre-signed URL from backend
-        const presignedUrlResponse = await fetch(apiEndpoint, {
+        console.log('Making fetch request to:', apiEndpoint);
+        console.log('FormData entries:', Array.from(formData.entries()).map(([k, v]) => 
+            k === 'file' ? [k, `File: ${v.name}`] : [k, v]
+        ));
+        
+        // Upload to backend
+        const response = await fetch(apiEndpoint, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
+                'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({
-                bucket: bucketName,
-                key: s3Key,
-                method: 'put',
-                contentType: file.type,
-                description: description
-            })
+            body: formData
         }).catch(err => {
             // Network error - couldn't reach the API endpoint
+            console.error('Fetch error details:', {
+                name: err.name,
+                message: err.message,
+                stack: err.stack
+            });
             throw new Error(`Network error: Could not reach API endpoint at ${apiEndpoint}. ${err.message}`);
         });
 
-        if (!presignedUrlResponse.ok) {
-            const errorText = await presignedUrlResponse.text();
-            throw new Error(`Failed to get pre-signed URL: ${presignedUrlResponse.status}. ${errorText}`);
+        console.log('Fetch response received:', { ok: response.ok, status: response.status, statusText: response.statusText });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `File upload failed: ${response.status}`);
         }
 
-        const { presignedUrl } = await presignedUrlResponse.json();
+        const data = await response.json();
         
-        if (!presignedUrl) {
-            throw new Error('No pre-signed URL returned from server');
+        if (!data.success) {
+            throw new Error(data.message || 'File upload failed');
         }
-
-        // console.log('Uploading directly to S3 with pre-signed URL');
-
-        // Step 2: Upload directly to S3 using pre-signed URL
-        const uploadResponse = await fetch(presignedUrl, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': file.type
-            },
-            body: file
-        });
-
-        if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text();
-            throw new Error(`S3 upload failed: ${uploadResponse.status}. ${errorText}`);
-        }
-
-        // console.log('File uploaded successfully to S3');
 
         // Return success data
         return {
             success: true,
-            message: 'File uploaded successfully',
-            bucket: bucketName,
-            key: s3Key,
-            fileName: file.name
+            message: data.message || 'File uploaded successfully',
+            bucket: data.bucket,
+            key: data.key,
+            fileName: data.file_name
         };
     } catch (error) {
         console.error('Error uploading file:', error);
@@ -178,7 +109,7 @@ export async function uploadFile(file, bucketName, key, description = '') {
 export async function startTextractAnalysis(bucket, key, outputBucket, outputKeyPrefix = null) {
     try {
         // Get the auth session details
-        const { token, sub } = await getAuthSession();
+        const { token } = await getAuthSession();
         
         // Validate required parameters
         if (!token) {
@@ -194,23 +125,11 @@ export async function startTextractAnalysis(bucket, key, outputBucket, outputKey
             throw new Error('Output bucket is required');
         }
         
-        // Set default outputKeyPrefix if not provided
-        // Extract template name from key (format: user_id/template_name/template_name.pdf)
-        let finalOutputKeyPrefix = outputKeyPrefix;
-        if (!finalOutputKeyPrefix) {
-            const keyParts = key.split('/');
-            // Store textract output under the template folder: user_id/template_name/textract-output
-            const templateName = keyParts[keyParts.length - 1].slice(0, -4); // Remove .pdf
-            finalOutputKeyPrefix = `users/${sub}/templates/${templateName}/textract-jobs`;
-        }
-        
-        // Verify we have an API endpoint
-        const apiEndpoint = import.meta.env.VITE_AWS_TEXTRACT_START_DOCUMENT_ANALYSIS_API_ENDPOINT;
-        if (!apiEndpoint) {
-            throw new Error('Textract API endpoint is not configured. Please check your environment variables.');
-        }
+        // Get Flask backend endpoint
+        const backendEndpoint = import.meta.env.VITE_FLASK_BACKEND_URL || 'http://localhost:5000';
+        const apiEndpoint = `${backendEndpoint}/api/textract/start-analysis`;
 
-        // Call the API Gateway endpoint
+        // Call the backend API
         const response = await fetch(apiEndpoint, {
             method: 'POST',
             headers: {
@@ -220,8 +139,8 @@ export async function startTextractAnalysis(bucket, key, outputBucket, outputKey
             body: JSON.stringify({
                 bucket: bucket,
                 key: key,
-                outputBucket: outputBucket,
-                outputKeyPrefix: finalOutputKeyPrefix
+                output_bucket: outputBucket,
+                output_key_prefix: outputKeyPrefix
             })
         });
 
@@ -232,16 +151,16 @@ export async function startTextractAnalysis(bucket, key, outputBucket, outputKey
 
         const data = await response.json();
         
-        if (!data.jobId) {
+        if (!data.success || !data.job_id) {
             throw new Error('No job ID returned from Textract service');
         }
 
         // Return success data
         return {
             success: true,
-            jobId: data.jobId,
+            jobId: data.job_id,
             status: data.status,
-            outputLocation: data.outputLocation
+            outputLocation: data.output_location
         };
     } catch (error) {
         console.error('Error starting Textract analysis:', error);
@@ -249,7 +168,18 @@ export async function startTextractAnalysis(bucket, key, outputBucket, outputKey
     }
 }
 
-export async function getTextractResults(jobId, nextToken = null) {
+/**
+ * Poll Textract job until completion and retrieve all results with pagination.
+ * Server-side polling reduces frontend network calls and complexity.
+ * Textract document analysis typically takes 2-5 minutes to complete.
+ * 
+ * @param {string} jobId - The Textract job ID
+ * @param {number} pollInterval - Polling interval in milliseconds (default: 10000 = 10 seconds)
+ * @param {number} maxAttempts - Maximum number of polling attempts (default: 60 = 10 minutes)
+ * @param {function} onProgress - Optional callback for progress updates
+ * @returns {Promise<Object>} Complete Textract results
+ */
+export async function pollTextractResults(jobId, pollInterval = 10000, maxAttempts = 60, onProgress = null) {
     try {
         // Get the auth session details
         const { token } = await getAuthSession();
@@ -262,145 +192,70 @@ export async function getTextractResults(jobId, nextToken = null) {
             throw new Error('Job ID is required');
         }
         
-        // Verify we have an API endpoint
-        const apiEndpoint = import.meta.env.VITE_AWS_TEXTRACT_GET_DOCUMENT_ANALYSIS_API_ENDPOINT;
-        if (!apiEndpoint) {
-            throw new Error('Textract Get Results API endpoint is not configured. Please check your environment variables.');
-        }
+        // Get Flask backend endpoint
+        const backendEndpoint = import.meta.env.VITE_FLASK_BACKEND_URL || 'http://localhost:5000';
+        const apiEndpoint = `${backendEndpoint}/api/textract/poll-results`;
 
-        // Build request body
-        const requestBody = {
-            jobId: jobId
-        };
+        // Note: Backend handles polling server-side, so this is a single call
+        // The backend will poll every `poll_interval` seconds for up to `max_attempts` times
+        // This may take several minutes for complex documents
         
-        // Add nextToken if provided for pagination
-        if (nextToken) {
-            requestBody.nextToken = nextToken;
+        console.log(`Starting Textract polling (server-side): jobId=${jobId}, max wait time=${(pollInterval * maxAttempts) / 60000} minutes`);
+        
+        if (onProgress) {
+            onProgress({
+                attempt: 0,
+                maxAttempts: maxAttempts,
+                jobStatus: 'IN_PROGRESS',
+                statusMessage: 'Polling for results (server-side)... This may take several minutes.'
+            });
         }
-
-        // Call the API Gateway endpoint
+        
+        // Call the backend API (handles polling server-side)
         const response = await fetch(apiEndpoint, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({
+                job_id: jobId,
+                poll_interval: pollInterval,
+                max_attempts: maxAttempts
+            })
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Failed to get Textract results: ${response.status}`);
+            throw new Error(errorData.error || `Failed to poll Textract results: ${response.status}`);
         }
 
         const data = await response.json();
         
-        // Return the response data
-        return {
-            success: true,
-            jobStatus: data.jobStatus,
-            statusMessage: data.statusMessage,
-            blocks: data.blocks || [],
-            documentMetadata: data.documentMetadata,
-            nextToken: data.nextToken,
-            hasMoreResults: data.hasMoreResults || false,
-            analyzeDocumentModelVersion: data.analyzeDocumentModelVersion,
-            warnings: data.warnings
-        };
-    } catch (error) {
-        console.error('Error getting Textract results:', error);
-        throw error;
-    }
-}
-
-/**
- * Poll Textract job until completion and retrieve all results with pagination.
- * 
- * @param {string} jobId - The Textract job ID
- * @param {number} pollInterval - Polling interval in milliseconds (default: 5000)
- * @param {number} maxAttempts - Maximum number of polling attempts (default: 60)
- * @param {function} onProgress - Optional callback for progress updates
- * @returns {Promise<Object>} Complete Textract results
- */
-export async function pollTextractResults(jobId, pollInterval = 5000, maxAttempts = 60, onProgress = null) {
-    try {
-        let attempts = 0;
-        
-        // Poll until job completes or max attempts reached
-        while (attempts < maxAttempts) {
-            attempts++;
-            
-            // Get current job status
-            const result = await getTextractResults(jobId);
-            
-            // Call progress callback if provided
-            if (onProgress) {
-                onProgress({
-                    attempt: attempts,
-                    maxAttempts: maxAttempts,
-                    jobStatus: result.jobStatus,
-                    statusMessage: result.statusMessage
-                });
-            }
-            
-            // If job is still in progress, wait and try again
-            if (result.jobStatus === 'IN_PROGRESS') {
-                await new Promise(resolve => setTimeout(resolve, pollInterval));
-                continue;
-            }
-            
-            // If job failed, throw error
-            if (result.jobStatus === 'FAILED') {
-                throw new Error(`Textract job failed: ${result.statusMessage || 'Unknown error'}`);
-            }
-            
-            // Job succeeded - now collect all paginated results
-            if (result.jobStatus === 'SUCCEEDED' || result.jobStatus === 'PARTIAL_SUCCESS') {
-                let allBlocks = result.blocks || [];
-                let currentNextToken = result.nextToken;
-                
-                // Keep fetching pages while nextToken exists
-                while (currentNextToken) {
-                    const pageResult = await getTextractResults(jobId, currentNextToken);
-                    
-                    if (pageResult.blocks) {
-                        allBlocks = allBlocks.concat(pageResult.blocks);
-                    }
-                    
-                    currentNextToken = pageResult.nextToken;
-                    
-                    // Call progress callback for pagination
-                    if (onProgress) {
-                        onProgress({
-                            attempt: attempts,
-                            maxAttempts: maxAttempts,
-                            jobStatus: result.jobStatus,
-                            statusMessage: 'Fetching paginated results...',
-                            totalBlocks: allBlocks.length,
-                            hasMorePages: !!currentNextToken
-                        });
-                    }
-                }
-                
-                // Return complete results
-                return {
-                    success: true,
-                    jobStatus: result.jobStatus,
-                    statusMessage: result.statusMessage,
-                    blocks: allBlocks,
-                    documentMetadata: result.documentMetadata,
-                    analyzeDocumentModelVersion: result.analyzeDocumentModelVersion,
-                    warnings: result.warnings,
-                    totalBlocks: allBlocks.length
-                };
-            }
-            
-            // Unknown status
-            throw new Error(`Unknown job status: ${result.jobStatus}`);
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to poll Textract results');
         }
         
-        // Max attempts reached
-        throw new Error(`Polling timeout: Job did not complete after ${maxAttempts} attempts`);
+        // Call final progress callback
+        if (onProgress) {
+            onProgress({
+                attempt: maxAttempts,
+                maxAttempts: maxAttempts,
+                jobStatus: data.job_status,
+                statusMessage: 'Completed',
+                totalBlocks: data.blocks_count
+            });
+        }
+        
+        // Return complete results (convert snake_case to camelCase for compatibility)
+        return {
+            success: true,
+            jobStatus: data.job_status,
+            statusMessage: 'Completed',
+            blocks: data.blocks || [],
+            documentMetadata: data.document_metadata,
+            totalBlocks: data.blocks_count
+        };
         
     } catch (error) {
         console.error('Error polling Textract results:', error);
@@ -429,13 +284,11 @@ export async function listS3Objects(bucket, parentFolder = '', listFiles = false
             throw new Error('Bucket name is required');
         }
         
-        // Verify we have an API endpoint
-        const apiEndpoint = import.meta.env.VITE_AWS_S3_LIST_FOLDERS_API_ENDPOINT;
-        if (!apiEndpoint) {
-            throw new Error('S3 List Folders API endpoint is not configured. Please check your environment variables.');
-        }
+        // Get Flask backend endpoint
+        const backendEndpoint = import.meta.env.VITE_FLASK_BACKEND_URL || 'http://localhost:5000';
+        const apiEndpoint = `${backendEndpoint}/api/s3/list-objects`;
 
-        // Call the API Gateway endpoint
+        // Call the backend API
         const response = await fetch(apiEndpoint, {
             method: 'POST',
             headers: {
@@ -456,6 +309,10 @@ export async function listS3Objects(bucket, parentFolder = '', listFiles = false
 
         const data = await response.json();
         
+        if (!data.success) {
+            throw new Error('Failed to list S3 objects');
+        }
+        
         // Return success data
         if (listFiles) {
             return {
@@ -471,7 +328,7 @@ export async function listS3Objects(bucket, parentFolder = '', listFiles = false
                 success: true,
                 folders: data.folders || [],
                 bucket: data.bucket,
-                parentFolder: data.parent_folder,
+                parentFolder: data.parent_folder
             };
         }
     } catch (error) {
@@ -503,13 +360,11 @@ export async function getPresignedUrlForGet(bucket, key) {
             throw new Error('Key is required');
         }
         
-        // Use the same endpoint as PUT, but with method: 'get'
-        const apiEndpoint = import.meta.env.VITE_AWS_S3_PUT_API_ENDPOINT;
-        if (!apiEndpoint) {
-            throw new Error('S3 presigned URL API endpoint is not configured. Please check your environment variables.');
-        }
+        // Get Flask backend endpoint
+        const backendEndpoint = import.meta.env.VITE_FLASK_BACKEND_URL || 'http://localhost:5000';
+        const apiEndpoint = `${backendEndpoint}/api/s3/presigned-url`;
 
-        // Call the API Gateway endpoint
+        // Call the backend API
         const response = await fetch(apiEndpoint, {
             method: 'POST',
             headers: {
@@ -530,12 +385,12 @@ export async function getPresignedUrlForGet(bucket, key) {
 
         const data = await response.json();
         
-        if (!data.presignedUrl) {
+        if (!data.success || !data.presigned_url) {
             throw new Error('No presigned URL returned from server');
         }
         
         // Return the presigned URL
-        return data.presignedUrl;
+        return data.presigned_url;
     } catch (error) {
         console.error('Error getting presigned URL for GET:', error);
         throw error;
@@ -544,7 +399,7 @@ export async function getPresignedUrlForGet(bucket, key) {
 
 /**
  * Get Textract results from S3 for a specific template.
- * Lists all Textract output files (which are prefixed with job IDs) and fetches all of them.
+ * Backend handles listing and fetching all Textract output files.
  * 
  * @param {string} bucket - The S3 bucket name
  * @param {string} templateName - The template name
@@ -553,11 +408,11 @@ export async function getPresignedUrlForGet(bucket, key) {
 export async function getTextractResultsFromS3(bucket, templateName) {
     try {
         // Get the auth session details
-        const { sub } = await getAuthSession();
+        const { token } = await getAuthSession();
         
         // Validate required parameters
-        if (!sub) {
-            throw new Error('User ID is missing');
+        if (!token) {
+            throw new Error('Authentication token is missing');
         }
         if (!bucket) {
             throw new Error('Bucket name is required');
@@ -566,76 +421,45 @@ export async function getTextractResultsFromS3(bucket, templateName) {
             throw new Error('Template name is required');
         }
         
-        // Construct the parent folder path for Textract output
-        // Format: templates/{template_name}/textract-output
-        const parentFolder = `users/${sub}/templates/${templateName}/textract-jobs`;
+        // Get Flask backend endpoint
+        const backendEndpoint = import.meta.env.VITE_FLASK_BACKEND_URL || 'http://localhost:5000';
+        const apiEndpoint = `${backendEndpoint}/api/textract/get-results-from-s3`;
         
-        console.log(`Listing Textract result files for template: ${templateName}`);
+        console.log(`Fetching Textract results from S3 for template: ${templateName}`);
         
-        // List all files in the textract-output folder using listS3Objects with listFiles=true
-        const filesResult = await listS3Objects(bucket, parentFolder, true);
+        // Call the backend API (handles list + fetch server-side)
+        const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                bucket: bucket,
+                template_name: templateName
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to get Textract results from S3: ${response.status}`);
+        }
+
+        const data = await response.json();
         
-        if (!filesResult.files || filesResult.files.length === 0) {
-            throw new Error(`No Textract result files found for template: ${templateName}`);
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to get Textract results from S3');
         }
         
-        // Filter out s3_access_check files - Textract files don't have extensions
-        const textractFiles = filesResult.files.filter(file => !file.fileName.endsWith('s3_access_check'));
+        console.log(`Total blocks fetched: ${data.blocks_count}`);
         
-        if (textractFiles.length === 0) {
-            throw new Error(`No Textract result files found for template: ${templateName}`);
-        }
-        
-        console.log(`Found ${textractFiles.length} Textract result files`);
-        
-        // Fetch all Textract result files in parallel
-        const allBlocks = [];
-        const fetchPromises = textractFiles.map(async (file) => {
-            try {
-                // Get presigned URL for this file
-                const presignedUrl = await getPresignedUrlForGet(bucket, file.key);
-                
-                // Fetch the JSON file
-                const fileResponse = await fetch(presignedUrl);
-                
-                if (!fileResponse.ok) {
-                    console.error(`Failed to fetch file ${file.fileName}: ${fileResponse.status}`);
-                    return [];
-                }
-                
-                const textractData = await fileResponse.json();
-                
-                // Extract blocks - handle both 'Blocks' and 'blocks' keys
-                const blocks = textractData.Blocks || textractData.blocks || [];
-                
-                console.log(`Fetched ${blocks.length} blocks from ${file.fileName}`);
-                
-                return blocks;
-            } catch (error) {
-                console.error(`Error fetching file ${file.fileName}:`, error);
-                return [];
-            }
-        });
-        
-        // Wait for all files to be fetched
-        const resultsArray = await Promise.all(fetchPromises);
-        
-        // Combine all blocks from all files
-        resultsArray.forEach(blocks => {
-            if (blocks && blocks.length > 0) {
-                allBlocks.push(...blocks);
-            }
-        });
-        
-        console.log(`Total blocks fetched: ${allBlocks.length}`);
-        
-        // Return success data with metadata
+        // Return success data with metadata (convert snake_case to camelCase for compatibility)
         return {
             success: true,
-            blocks: allBlocks,
-            blocksCount: allBlocks.length,
-            filesCount: textractFiles.length,
-            fileNames: textractFiles.map(f => f.fileName)
+            blocks: data.blocks || [],
+            blocksCount: data.blocks_count,
+            filesCount: data.files_count,
+            fileNames: data.file_names || []
         };
     } catch (error) {
         console.error('Error getting Textract results from S3:', error);

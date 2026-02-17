@@ -1,4 +1,4 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, createSelector } from '@reduxjs/toolkit';
 
 const initialState = {
     // Mapping of inputId to array of blockIds
@@ -62,16 +62,31 @@ export const {
 } = boxBindingsSlice.actions;
 
 // Selectors
-export const selectBinding = (state, inputId) => {
-    return state.boxBindings.bindings[inputId] || [];
-};
+// Cache empty array to maintain reference equality
+const EMPTY_ARRAY = [];
+
+export const selectBinding = createSelector(
+    [
+        (state) => state.boxBindings.bindings,
+        (state, inputId) => inputId,
+    ],
+    (bindings, inputId) => {
+        return bindings[inputId] || EMPTY_ARRAY;
+    }
+);
 
 export const selectAllBindings = (state) => state.boxBindings.bindings;
 
 // Helper to get the first (primary) blockId for an input
-export const selectPrimaryBlockId = (state, inputId) => {
-    const bindings = state.boxBindings.bindings[inputId];
-    return bindings && bindings.length > 0 ? bindings[0] : null;
-};
+export const selectPrimaryBlockId = createSelector(
+    [
+        (state) => state.boxBindings.bindings,
+        (state, inputId) => inputId,
+    ],
+    (bindings, inputId) => {
+        const binding = bindings[inputId];
+        return binding && binding.length > 0 ? binding[0] : null;
+    }
+);
 
 export default boxBindingsSlice.reducer;

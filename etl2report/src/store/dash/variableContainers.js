@@ -1,4 +1,4 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, createSelector } from '@reduxjs/toolkit';
 
 const initialState = {
     manuals: {
@@ -71,12 +71,16 @@ const variableContainersSlice = createSlice({
 export const { addVariable, removeVariable, reorderVariables, clearCategory, clearAll } = variableContainersSlice.actions;
 
 // Selectors
-export const selectSections = (state) => {
-    return Object.keys(state.variableContainers).map((key) => ({
-        id: key,
-        title: state.variableContainers[key].title,
-        variablePrefix: state.variableContainers[key].variablePrefix
-    }));
-};
+// Memoized selector to prevent unnecessary re-renders
+export const selectSections = createSelector(
+    [(state) => state.variableContainers],
+    (variableContainers) => {
+        return Object.keys(variableContainers).map((key) => ({
+            id: key,
+            title: variableContainers[key].title,
+            variablePrefix: variableContainers[key].variablePrefix
+        }));
+    }
+);
 
 export default variableContainersSlice.reducer;

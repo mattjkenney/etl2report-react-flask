@@ -1,0 +1,603 @@
+# Frontend to Backend API Refactoring Plan
+# ==========================================
+# Goal: Channel all AWS API calls through the Flask backend instead of making direct calls from the frontend
+# Date: 2026-02-10
+
+project:
+  name: ETL2Report API Refactoring
+  description: Consolidate all API Gateway calls through Flask backend, removing direct API Gateway calls from frontend
+  affected_folders:
+    - etl2report/src/utils/
+    - etl2report/src/components/
+    - etl2report/src/store/dash/
+    - backend/
+  
+  reference_documentation:
+    - file: backend/lambda_proxies/api_gateway_lambda_mapping.yaml
+      description: |-
+        Comprehensive mapping of API Gateway endpoints to Lambda functions.
+        Includes authentication flow, IAM roles, environment variables, and request/response examples.
+        This document shows exactly how Flask backend proxies to each Lambda function.
+
+# ==========================================
+# PHASE 1: Backend API Development
+# ==========================================
+phase_1_backend_apis:
+  description: Create new Flask endpoints that proxy to existing API Gateway/Lambda endpoints
+  
+  new_endpoints:
+    # S3 Operations
+    - endpoint: /api/s3/upload
+      method: POST
+      description: Upload file to S3 (replace uploadFile function)
+      request_body:
+        bucket: string
+        key: string
+        file: binary (multipart/form-data)
+        content_type: string
+        description: string (optional)
+      response:
+        success: boolean
+        message: string
+        bucket: string
+        key: string
+        file_name: string
+      current_frontend_function: uploadFile()
+      current_implementation: Direct call to API Gateway Lambda (lambda_s3_presigned_url.py)
+      backend_implementation: Proxy to existing API Gateway endpoint
+      
+    - endpoint: /api/s3/list-objects
+      method: POST
+      description: List folders or files in S3 bucket
+      request_body:
+        bucket: string
+        parent_folder: string (optional, defaults to user's root)
+        list_files: boolean (default false)
+      response:
+        success: boolean
+        folders: # array of strings (if list_files=false)
+          - string
+        files: # array of objects (if list_files=true)
+          - file_name: string
+            key: string
+            size: number
+            last_modified: string
+      current_frontend_function: listS3Objects()
+      current_implementation: Direct call to API Gateway Lambda (lambda_list_s3_folders.py)
+      backend_implementation: Proxy to existing API Gateway endpoint
+      
+    - endpoint: /api/s3/presigned-url
+      method: POST
+      description: Generate presigned URL for S3 operations
+      request_body:
+        bucket: string
+        key: string
+        method: string (get|put)
+        content_type: string (optional, for put)
+        expiration: number (optional, seconds, default 3600)
+      response:
+        success: boolean
+        presigned_url: string
+      current_frontend_function: getPresignedUrlForGet()
+      current_implementation: Direct call to API Gateway Lambda (lambda_s3_presigned_url.py)
+      backend_implementation: Proxy to existing API Gateway endpoint
+      
+    - endpoint: /api/s3/fetch-html-template
+      method: POST
+      description: Fetch HTML template from S3
+      request_body:
+        template_name: string
+        bucket: string
+      response:
+        success: boolean
+        html_content: string
+        template_name: string
+      current_frontend_function: fetchHtmlTemplate()
+      current_implementation: Direct call to API Gateway Lambda + S3 fetch
+      backend_implementation: Proxy to API Gateway for presigned URL, then fetch from S3
+      
+    # Textract Operations
+    - endpoint: /api/textract/start-analysis
+      method: POST
+      description: Start Textract document analysis
+      request_body:
+        bucket: string
+        key: string
+        output_bucket: string
+        output_key_prefix: string (optional)
+      response:
+        success: boolean
+        job_id: string
+        status: string
+        output_location: string
+      current_frontend_function: startTextractAnalysis()
+      current_implementation: Direct call to API Gateway Lambda (lambda_start_textract_analysis.py)
+      backend_implementation: Proxy to existing API Gateway endpoint
+      
+    - endpoint: /api/textract/get-results
+      method: POST
+      description: Get Textract analysis results (single call)
+      request_body:
+        job_id: string
+        next_token: string (optional, for pagination)
+      response:
+        success: boolean
+        job_status: string (IN_PROGRESS|SUCCEEDED|FAILED|PARTIAL_SUCCESS)
+        status_message: string
+        blocks: array
+        document_metadata: object
+        next_token: string (optional)
+        has_more_results: boolean
+      current_frontend_function: getTextractResults()
+      current_implementation: Direct call to API Gateway Lambda (lambda_get_textract_results.py)
+      backend_implementation: Proxy to existing API Gateway endpoint
+      
+    - endpoint: /api/textract/poll-results
+      method: POST
+      description: Poll Textract results until completion (handles polling server-side)
+      request_body:
+        job_id: string
+        poll_interval: number (optional, milliseconds, default 5000)
+        max_attempts: number (optional, default 60)
+      response:
+        success: boolean
+        job_status: string
+        blocks: array (all paginated results combined)
+        blocks_count: number
+        document_metadata: object
+      current_frontend_function: pollTextractResults()
+      current_implementation: Frontend polling loop calling API Gateway
+      backend_implementation: Server-side polling that calls API Gateway Lambda repeatedly
+      notes: This moves polling logic to backend to reduce frontend load and network calls
+      
+    - endpoint: /api/textract/get-results-from-s3
+      method: POST
+      description: Fetch all Textract results from S3 for a template
+      request_body:
+        bucket: string
+        template_name: string
+      response:
+        success: boolean
+        blocks: array (combined from all result files)
+        blocks_count: number
+        files_count: number
+        file_names: array of strings
+      current_frontend_function: getTextractResultsFromS3()
+      current_implementation: Call API Gateway to list + multiple presigned URL fetches
+      backend_implementation: Proxy to API Gateway for list and presigned URLs, aggregate results
+      
+  backend_implementation_details:
+    new_files:
+      - path: backend/utils/api_gateway_client.py
+        description: HTTP client wrapper for API Gateway endpoints
+        functions:
+          - call_s3_presigned_url_lambda(bucket, key, method, content_type, auth_token)
+          - call_s3_list_lambda(bucket, parent_folder, list_files, auth_token)
+          - call_textract_start_lambda(bucket, key, output_bucket, output_prefix, auth_token)
+          - call_textract_get_results_lambda(job_id, next_token, auth_token)
+          
+      - path: backend/utils/s3_operations.py
+        description: S3-related orchestration (uses api_gateway_client for API calls)
+        functions:
+          - upload_file_to_s3(bucket, key, file_data, content_type, user_id, auth_token)
+          - list_s3_objects(bucket, prefix, list_files, user_id, auth_token)
+          - get_presigned_url(bucket, key, method, user_id, auth_token)
+          - fetch_html_template(bucket, template_name, user_id, auth_token)
+          
+      - path: backend/utils/textract_operations.py
+        description: Textract-related orchestration (uses api_gateway_client)
+        functions:
+          - start_textract_analysis(bucket, key, output_bucket, output_prefix, user_id, auth_token)
+          - get_textract_results(job_id, next_token, auth_token)
+          - poll_textract_results(job_id, poll_interval, max_attempts, auth_token)
+          - get_textract_results_from_s3(bucket, template_name, user_id, auth_token)
+          
+      - path: backend/utils/jwt_helper.py
+        description: JWT token decoding for user_id extraction (Flask backend only)
+        functions:
+          - extract_user_id(token) # Decode JWT to extract 'sub' claim using jwt.decode()
+        note: |-
+          Lambda functions don't need this - they get sub from API Gateway authorizer context.
+          Flask backend needs it because it receives raw JWT tokens and must extract sub for path building.
+          
+    dependencies_to_add:
+      - requests>=2.28.0 (HTTP client for API Gateway calls)
+      - PyJWT>=2.6.0 (JWT token decoding, no verification needed)
+      - python-dotenv>=0.19.0 (already exists)
+      
+    environment_variables:
+      - API_GATEWAY_S3_PRESIGNED_URL_ENDPOINT (your existing Lambda endpoint)
+      - API_GATEWAY_S3_LIST_FOLDERS_ENDPOINT (your existing Lambda endpoint)
+      - API_GATEWAY_TEXTRACT_START_ENDPOINT (your existing Lambda endpoint)
+      - API_GATEWAY_TEXTRACT_GET_RESULTS_ENDPOINT (your existing Lambda endpoint)
+      - S3_BUCKET (default bucket name)
+      - CORS_ORIGINS (comma-separated frontend URLs for CORS, e.g., https://app.example.com,https://www.example.com)
+      
+    authentication:
+      description: Extract user_id from JWT, pass token to API Gateway for validation
+      implementation: |
+        1. Extract JWT token from Authorization Bearer header
+        2. Decode JWT (no verification) to extract user_id (sub) using:
+           jwt.decode(token, options={"verify_signature": False})
+        3. Use user_id to build S3 paths: users/{user_id}/...
+        4. Pass original token through to API Gateway in Authorization header
+        5. API Gateway Cognito Authorizer validates token and provides sub to Lambda
+        6. Lambda functions receive sub from event['requestContext']['authorizer']['claims']['sub']
+      user_path_prefix: users/{user_id}/ (maintains existing S3 structure)
+      note: |-
+        Flask backend extracts sub only for path building (no validation).
+        API Gateway handles security validation before invoking Lambda.
+        Lambda functions trust API Gateway's validation and use pre-extracted sub.
+
+# ==========================================
+# PHASE 2: Frontend Refactoring
+# ==========================================
+phase_2_frontend_refactoring:
+  description: Update frontend to call backend APIs instead of AWS directly
+  
+  files_to_modify:
+    - file: etl2report/src/utils/aws-api.js
+      changes:
+        - action: refactor
+          description: Replace AWS Lambda/SDK calls with Flask backend API calls
+          affected_functions:
+            - fetchHtmlTemplate: Call /api/s3/fetch-html-template
+            - uploadFile: Call /api/s3/upload with multipart/form-data
+            - startTextractAnalysis: Call /api/textract/start-analysis
+            - getTextractResults: Call /api/textract/get-results
+            - pollTextractResults: Call /api/textract/poll-results
+            - listS3Objects: Call /api/s3/list-objects
+            - getPresignedUrlForGet: Call /api/s3/presigned-url
+            - getTextractResultsFromS3: Call /api/textract/get-results-from-s3
+            - convertPdfToHtml: NO CHANGE (already uses backend)
+          notes:
+            - Keep function signatures identical to maintain component compatibility
+            - Update internal implementation to use backend endpoints
+            - backend_url: import.meta.env.VITE_FLASK_BACKEND_URL
+            - Maintain error handling patterns
+            
+    - file: etl2report/src/components/NewTemplate.jsx
+      changes:
+        - action: verify_compatibility
+          description: Ensure component works with refactored aws-api.js functions
+          functions_used:
+            - uploadFile
+            - startTextractAnalysis
+            - pollTextractResults
+            - convertPdfToHtml (already backend)
+          expected_impact: None (function signatures unchanged)
+          
+    - file: etl2report/src/store/dash/templates.js
+      changes:
+        - action: verify_compatibility
+          description: Ensure Redux thunks work with refactored functions
+          functions_used:
+            - listS3Objects
+            - getPresignedUrlForGet
+            - getTextractResultsFromS3
+          expected_impact: None (function signatures unchanged)
+          
+    - file: etl2report/src/store/dash/reports.js
+      changes:
+        - action: verify_compatibility
+          description: Ensure Redux thunks work with refactored functions
+          functions_used:
+            - listS3Objects
+            - getPresignedUrlForGet
+          expected_impact: None (function signatures unchanged)
+          
+  environment_variables_to_update:
+    description: Update .env to use backend endpoints instead of Lambda endpoints
+    deprecated_variables:
+      - VITE_AWS_S3_GET_API_ENDPOINT (Lambda)
+      - VITE_AWS_S3_PUT_API_ENDPOINT (Lambda)
+      - VITE_AWS_S3_LIST_FOLDERS_API_ENDPOINT (Lambda)
+      - VITE_AWS_TEXTRACT_START_DOCUMENT_ANALYSIS_API_ENDPOINT (Lambda)
+      - VITE_AWS_TEXTRACT_GET_DOCUMENT_ANALYSIS_API_ENDPOINT (Lambda)
+    retained_variables:
+      - VITE_FLASK_BACKEND_URL (already exists)
+      - VITE_AWS_S3_BUCKET (bucket name for client-side logic)
+    notes: All AWS operations now go through VITE_FLASK_BACKEND_URL
+
+# ==========================================
+# PHASE 3: Lambda Function Status
+# ==========================================
+phase_3_lambda_status:
+  description: Lambda functions remain unchanged - backend proxies to them
+  
+  lambda_functions_status:
+    - file: etl2report/lambda_s3_presigned_url.py
+      status: REMAINS ACTIVE
+      usage: Backend Flask proxies HTTP calls to this Lambda via API Gateway
+      frontend_access: Changed from direct to via Flask backend
+      notes: Lambda function unchanged, still handles S3 presigned URL generation
+      
+    - file: etl2report/lambda_list_s3_folders.py
+      status: REMAINS ACTIVE
+      usage: Backend Flask proxies HTTP calls to this Lambda via API Gateway
+      frontend_access: Changed from direct to via Flask backend
+      notes: Lambda function unchanged, still handles S3 listing operations
+      
+    - file: etl2report/lambda_start_textract_analysis.py
+      status: REMAINS ACTIVE
+      usage: Backend Flask proxies HTTP calls to this Lambda via API Gateway
+      frontend_access: Changed from direct to via Flask backend
+      notes: Lambda function unchanged, still starts Textract analysis jobs
+      
+    - file: etl2report/lambda_get_textract_results.py
+      status: REMAINS ACTIVE
+      usage: Backend Flask proxies HTTP calls to this Lambda via API Gateway
+      frontend_access: Changed from direct to via Flask backend
+      notes: Lambda function unchanged, still retrieves Textract results
+      
+  architecture_change:
+    before: Frontend → API Gateway → Lambda → AWS Services
+    after: Frontend → Flask Backend → API Gateway → Lambda → AWS Services
+    benefits:
+      - Centralized JWT validation in Flask
+      - Server-side polling reduces frontend network calls
+      - Single point for request/response transformation
+      - Easier to add caching, rate limiting, logging
+      - Frontend simplified (no AWS SDK dependencies)
+    lambda_impact: None - Lambda functions continue to work as-is
+
+# ==========================================
+# PHASE 4: Testing Strategy
+# ==========================================
+phase_4_testing:
+  description: Comprehensive testing approach for the refactoring
+  
+  backend_testing:
+    unit_tests:
+      - file: backend/tests/test_s3_service.py
+        tests:
+          - test_upload_file_to_s3
+          - test_list_s3_objects_folders
+          - test_list_s3_objects_files
+          - test_generate_presigned_url_get
+          - test_generate_presigned_url_put
+          - test_fetch_html_template
+          
+      - file: backend/tests/test_textract_service.py
+        tests:
+          - test_start_textract_analysis
+          - test_get_textract_results
+          - test_poll_textract_results
+          - test_get_textract_results_from_s3
+          
+    integration_tests:
+      - file: backend/tests/test_api_endpoints.py
+        tests:
+          - test_s3_upload_endpoint
+          - test_s3_list_objects_endpoint
+          - test_textract_start_endpoint
+          - test_textract_poll_endpoint
+          - test_authentication_required
+          - test_user_isolation
+          
+  frontend_testing:
+    manual_tests:
+      - NewTemplate component:
+          - Upload PDF file
+          - Start Textract analysis
+          - Poll for results
+          - Generate HTML template
+      - EditTemplate component:
+          - Load existing template
+          - View Textract blocks
+          - Edit template elements
+      - ViewReports component:
+          - List all reports
+          - Download report PDF
+          
+    e2e_tests:
+      description: End-to-end workflow testing
+      workflows:
+        - name: Create new template
+          steps:
+            - Upload PDF
+            - Process with Textract
+            - Generate HTML template
+            - Save to S3
+        - name: Generate report from template
+          steps:
+            - Load template
+            - Fill in variables
+            - Generate PDF report
+            - Download report
+            
+  performance_testing:
+    concerns:
+      - Backend may be slower than direct Lambda calls initially
+      - File upload may have size limits in Flask
+      - Polling operations should be efficient
+    metrics_to_monitor:
+      - API response times
+      - File upload throughput
+      - Textract polling efficiency
+      - Error rates
+      
+# ==========================================
+# PHASE 5: Deployment & Rollout
+# ==========================================
+phase_5_deployment:
+  description: Staged rollout strategy
+  
+  prerequisites:
+    - API Gateway endpoint URLs configured in backend .env
+    - requests library installed in backend environment
+    - PyJWT library installed for token decoding
+    - Environment variables set
+    - Backend CORS configured via CORS_ORIGINS environment variable (no wildcards in production)
+    - CORS_ORIGINS set to specific frontend URL(s)
+    
+  deployment_steps:
+    step_1:
+      name: Deploy backend changes
+      actions:
+        - Add requests, PyJWT to requirements.txt
+        - Create api_gateway_client.py, s3_operations.py, textract_operations.py, jwt_helper.py
+        - Add new API endpoints to app.py
+        - Configure API Gateway endpoint URLs in .env
+        - Set CORS_ORIGINS in .env to your frontend URL(s) only (production: no localhost)
+        - Verify CORS configuration uses CORS_ORIGINS environment variable
+        - Test backend endpoints with Postman/curl
+        
+    step_2:
+      name: Deploy frontend changes (feature flag optional)
+      actions:
+        - Update aws-api.js to use backend endpoints
+        - Update .env with VITE_FLASK_BACKEND_URL
+        - Build and deploy frontend
+        - Test with real user workflows
+        
+    step_3:
+      name: Monitor and validate
+      actions:
+        - Monitor backend logs for errors
+        - Check API response times
+        - Validate file uploads working
+        - Confirm Textract processing working
+        - Verify user isolation (users can only access their data)
+        
+    step_4:
+      name: Validate Lambda integration
+      actions:
+        - Confirm Lambda functions still working correctly
+        - Verify API Gateway routing unchanged
+        - Monitor Lambda CloudWatch logs for errors
+        - Check Lambda execution counts (should remain similar)
+        - Validate JWT tokens being passed correctly to Lambdas
+        
+  rollback_plan:
+    description: If issues arise, rollback to direct API Gateway calls
+    steps:
+      - Revert frontend .env to use API Gateway endpoints directly
+      - Revert aws-api.js to previous version (direct API Gateway calls)
+      - Deploy frontend rollback
+      - Lambda functions unaffected (no changes needed)
+      - Investigate and fix backend issues
+      - Re-attempt deployment
+
+# ==========================================
+# PHASE 6: Documentation & Cleanup
+# ==========================================
+phase_6_documentation:
+  description: Update documentation and clean up code
+  
+  documentation_updates:
+    - file: backend/README.md
+      updates:
+        - Document new proxy endpoints for S3 and Textract operations
+        - Add API Gateway endpoint configuration guide
+        - Add JWT validation setup instructions
+        - Document request/response flow through backend
+        
+    - file: etl2report/README.md
+      updates:
+        - Update architecture diagram (show backend proxy layer)
+        - Document backend API usage
+        - Note that Lambda functions remain active but accessed via backend
+        
+    - file: IMPLEMENTATION_NOTES.md
+      updates:
+        - Add refactoring completion notes
+        - Document architecture changes
+        - Note deprecated Lambda functions
+        
+  code_cleanup:
+    frontend:
+      - Remove unused AWS Amplify imports (if any)
+      - Remove Lambda endpoint environment variables
+      - Clean up comments referencing Lambda
+      
+    backend:
+      - Ensure consistent error handling
+      - Add comprehensive logging
+      - Document all utility functions
+      - Update CORS to use environment variable for frontend origin
+      - Remove hardcoded localhost URLs from CORS in production
+      
+    lambda_folder:
+      - Lambda files remain in place (still active)
+      - Add comments noting they are called via Flask backend
+      - Document that frontend no longer calls them directly
+
+# ==========================================
+# BENEFITS & RISKS
+# ==========================================
+benefits:
+  - Centralized user_id extraction for path building in backend
+  - Better user data isolation (server-side user_id extraction)
+  - Simplified frontend (no direct API Gateway endpoint management)
+  - Easier to add caching and rate limiting in Flask
+  - Server-side polling reduces frontend network calls
+  - Unified logging and monitoring in backend
+  - Better error handling and response transformation
+  - Single point for API Gateway endpoint configuration
+  - Frontend doesn't need to know about multiple API Gateway endpoints
+  - Security validation remains in API Gateway (defense in depth)
+
+risks:
+  - Backend becomes single point of failure
+  - Additional network hop (Frontend → Flask → API Gateway → Lambda)
+  - Backend scaling considerations
+  - File upload size limits in Flask
+  - Increased backend resource usage
+  - Lambda cold starts still apply
+  - Doubled latency on some operations
+  
+mitigation_strategies:
+  - Implement proper error handling and retries in Flask
+  - Add response caching in Flask for repeated API Gateway calls
+  - Monitor backend and Lambda performance
+  - Configure Flask request size limits appropriately
+  - Use gunicorn/uwsgi for production deployment
+  - Implement health checks for backend and API Gateway connectivity
+  - Keep direct API Gateway endpoints available as emergency rollback
+  - Consider async operations where possible
+  - Monitor Lambda invocation counts (should stay same)
+
+# ==========================================
+# ESTIMATED EFFORT
+# ==========================================
+estimated_effort:
+  backend_development:
+    duration: 2-3 days
+    breakdown:
+      - API Gateway client wrapper: 0.5 days
+      - JWT token extraction helper: 0.25 days
+      - S3 operations proxy: 0.5 days
+      - Textract operations proxy: 0.5 days
+      - API endpoints: 0.5 days
+      - Testing: 0.5-1 days
+    
+  frontend_refactoring:
+    duration: 2-3 days
+    breakdown:
+      - aws-api.js refactoring: 1 day
+      - Component testing: 1 day
+      - Integration testing: 1 day
+    
+  testing_and_validation:
+    duration: 2-3 days
+    breakdown:
+      - Unit tests: 1 day
+      - Integration tests: 1 day
+      - E2E testing: 1 day
+    
+  deployment_and_monitoring:
+    duration: 1-2 days
+    breakdown:
+      - Backend deployment: 0.5 days
+      - Frontend deployment: 0.5 days
+      - Monitoring: 1 day
+    
+  documentation_and_cleanup:
+    duration: 1 day
+  
+  total_estimated_time: 7-11 days
+  
+  recommended_approach: Implement in phases over 1-2 weeks with thorough testing between phases
+  
+  note: Faster than original estimate because Lambda functions remain unchanged

@@ -1,0 +1,446 @@
+# API Gateway to Lambda Proxy Mapping
+# =====================================
+# This file documents the mapping between API Gateway endpoints and Lambda functions.
+# The Flask backend will proxy requests to these API Gateway endpoints, which invoke the Lambda functions.
+
+api_gateway_endpoints:
+  # S3 Presigned URL Lambda
+  - name: S3 Presigned URL Service
+    env_variable: API_GATEWAY_S3_PRESIGNED_URL_ENDPOINT
+    example_url: https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod/s3-presigned-url
+    lambda_function: lambda_s3_presigned_url.py
+    lambda_handler: lambda_handler
+    authorizer: Cognito User Pool Authorizer
+    methods:
+      - POST
+    operations:
+      - name: Generate presigned URL for GET
+        description: Generate presigned URL to download/fetch an object from S3
+        request_body:
+          bucket: string (required)
+          key: string (required)
+          method: "get"
+        response:
+          presignedUrl: string
+          bucket: string
+          key: string
+          method: string
+          expiresIn: number
+          
+      - name: Generate presigned URL for PUT
+        description: Generate presigned URL to upload an object to S3
+        request_body:
+          bucket: string (required)
+          key: string (required)
+          method: "put"
+          contentType: string (required)
+          description: string (optional)
+        response:
+          presignedUrl: string
+          bucket: string
+          key: string
+          method: string
+          expiresIn: number
+          
+    flask_backend_usage:
+      - endpoint: /api/s3/presigned-url
+        maps_to: Both GET and PUT presigned URL operations
+      - endpoint: /api/s3/upload
+        maps_to: PUT presigned URL operation (then frontend uploads to presigned URL)
+      - endpoint: /api/s3/fetch-html-template
+        maps_to: GET presigned URL operation (then backend fetches content)
+        
+  # S3 List Folders/Files Lambda
+  - name: S3 List Objects Service
+    env_variable: API_GATEWAY_S3_LIST_FOLDERS_ENDPOINT
+    example_url: https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod/s3-list-folders
+    lambda_function: lambda_list_s3_folders.py
+    lambda_handler: lambda_handler
+    authorizer: Cognito User Pool Authorizer
+    methods:
+      - POST
+    operations:
+      - name: List folders
+        description: List sub-folders within a parent folder
+        request_body:
+          bucket: string (required)
+          parent_folder: string (optional, default empty)
+          list_files: false
+        response:
+          folders: array of strings
+          bucket: string
+          parent_folder: string
+          
+      - name: List files
+        description: List all files within a folder
+        request_body:
+          bucket: string (required)
+          parent_folder: string (optional, default empty)
+          list_files: true
+        response:
+          files: array of objects
+            - key: string
+              fileName: string
+              size: number
+              lastModified: string (ISO format)
+          bucket: string
+          parent_folder: string
+          count: number
+          
+    flask_backend_usage:
+      - endpoint: /api/s3/list-objects
+        maps_to: Both list folders and list files operations (based on list_files parameter)
+      - endpoint: /api/textract/get-results-from-s3
+        maps_to: List files operation (to find Textract result files)
+        
+  # Textract Start Analysis Lambda
+  - name: Textract Start Document Analysis Service
+    env_variable: API_GATEWAY_TEXTRACT_START_ENDPOINT
+    example_url: https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod/textract-start-analysis
+    lambda_function: lambda_start_textract_analysis.py
+    lambda_handler: lambda_handler
+    authorizer: Cognito User Pool Authorizer
+    methods:
+      - POST
+    operations:
+      - name: Start document analysis
+        description: Start asynchronous Textract document analysis job
+        request_body:
+          bucket: string (required)
+          key: string (required)
+          outputBucket: string (required)
+          outputKeyPrefix: string (required)
+        response:
+          jobId: string
+          status: string
+          outputLocation:
+            bucket: string
+            keyPrefix: string
+        textract_features:
+          - TABLES
+          - FORMS
+          - LAYOUT
+          - SIGNATURES
+          
+    flask_backend_usage:
+      - endpoint: /api/textract/start-analysis
+        maps_to: Start document analysis operation
+        
+  # Textract Get Results Lambda
+  - name: Textract Get Document Analysis Results Service
+    env_variable: API_GATEWAY_TEXTRACT_GET_RESULTS_ENDPOINT
+    example_url: https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod/textract-get-results
+    lambda_function: lambda_get_textract_results.py
+    lambda_handler: lambda_handler
+    authorizer: Cognito User Pool Authorizer
+    methods:
+      - POST
+    operations:
+      - name: Get analysis results
+        description: Get Textract analysis results for a job (supports pagination)
+        request_body:
+          jobId: string (required)
+          nextToken: string (optional, for pagination)
+        response:
+          jobStatus: string (IN_PROGRESS|SUCCEEDED|FAILED|PARTIAL_SUCCESS)
+          statusMessage: string (optional)
+          blocks: array (if job completed)
+          documentMetadata:
+            pages: number
+          nextToken: string (optional, if more results available)
+          hasMoreResults: boolean
+          analyzeDocumentModelVersion: string
+          warnings: array (optional)
+        notes: Single call returns one page of results. Use nextToken for pagination.
+        
+    flask_backend_usage:
+      - endpoint: /api/textract/get-results
+        maps_to: Get analysis results operation (single call)
+      - endpoint: /api/textract/poll-results
+        maps_to: Get analysis results operation (called repeatedly until job completes)
+        notes: Backend handles polling loop and pagination automatically
+
+# Authentication Flow
+# ===================
+authentication_flow:
+  description: How JWT tokens flow through the system
+  steps:
+    - step: 1
+      actor: Frontend (React)
+      action: User logs in via AWS Amplify
+      result: JWT token from Cognito
+      
+    - step: 2
+      actor: Frontend (React)
+      action: Makes API request to Flask backend with Authorization Bearer header
+      result: JWT token passed to backend
+      
+    - step: 3
+      actor: Flask Backend
+      action: Extracts sub (user_id) from JWT using jwt.decode (no verification)
+      result: user_id used for path building (e.g., users/{user_id}/templates/)
+      
+    - step: 4
+      actor: Flask Backend
+      action: Proxies request to API Gateway with original JWT token in Authorization header
+      result: Request forwarded to API Gateway
+      
+    - step: 5
+      actor: API Gateway
+      action: Cognito Authorizer validates JWT token signature and expiration
+      result: Token validated, user_id (sub) extracted and added to request context
+      
+    - step: 6
+      actor: API Gateway
+      action: Invokes Lambda function with enriched event context
+      result: Lambda receives event['requestContext']['authorizer']['claims']['sub']
+      
+    - step: 7
+      actor: Lambda Function
+      action: Uses pre-validated sub from API Gateway for AWS operations
+      result: Tenant-scoped AWS operations executed
+      
+    - step: 8
+      actor: Lambda Function
+      action: Returns response to API Gateway
+      result: Response forwarded back through chain
+      
+    - step: 9
+      actor: Flask Backend
+      action: Receives Lambda response, optionally transforms it
+      result: Response sent to frontend
+      
+    - step: 10
+      actor: Frontend (React)
+      action: Receives and processes response
+      result: UI updated
+
+# IAM Role Assumption (Multi-tenant Isolation)
+# ============================================
+iam_roles:
+  description: Lambda functions use IAM role assumption for tenant isolation
+  
+  s3_operations:
+    role_env_variable: S3_TENANT_ROLE_ARN
+    role_purpose: Scoped S3 access with TenantID session tags
+    used_by:
+      - lambda_s3_presigned_url.py
+      - lambda_list_s3_folders.py
+    session_tags:
+      - Key: TenantID
+        Value: "{user_id from Cognito}"
+    
+  textract_operations:
+    role_env_variable: TEXTRACT_ROLE_ARN
+    role_purpose: Scoped Textract access with TenantID session tags
+    used_by:
+      - lambda_start_textract_analysis.py
+      - lambda_get_textract_results.py
+    session_tags:
+      - Key: TenantID
+        Value: "{user_id from Cognito}"
+        
+  implementation:
+    function: get_client_with_assumed_role()
+    location: lambda_utils.py
+    description: Assumes IAM role with tenant tagging for multi-tenant resource isolation
+
+# Environment Variables Required
+# ==============================
+required_environment_variables:
+  flask_backend:
+    - name: API_GATEWAY_S3_PRESIGNED_URL_ENDPOINT
+      example: https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod/s3-presigned-url
+      description: API Gateway endpoint for S3 presigned URL Lambda
+      
+    - name: API_GATEWAY_S3_LIST_FOLDERS_ENDPOINT
+      example: https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod/s3-list-folders
+      description: API Gateway endpoint for S3 list objects Lambda
+      
+    - name: API_GATEWAY_TEXTRACT_START_ENDPOINT
+      example: https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod/textract-start-analysis
+      description: API Gateway endpoint for Textract start analysis Lambda
+      
+    - name: API_GATEWAY_TEXTRACT_GET_RESULTS_ENDPOINT
+      example: https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod/textract-get-results
+      description: API Gateway endpoint for Textract get results Lambda
+      
+    - name: S3_BUCKET
+      example: my-app-data-bucket
+      description: Default S3 bucket name
+      
+    - name: CORS_ORIGINS
+      example: https://app.example.com,https://www.example.com
+      description: Comma-separated list of allowed frontend origins
+      
+  lambda_functions:
+    - name: S3_TENANT_ROLE_ARN
+      example: arn:aws:iam::123456789012:role/S3TenantAccessRole
+      description: IAM role ARN for S3 operations with tenant tagging
+      required_by:
+        - lambda_s3_presigned_url.py
+        - lambda_list_s3_folders.py
+        
+    - name: TEXTRACT_ROLE_ARN
+      example: arn:aws:iam::123456789012:role/TextractTenantAccessRole
+      description: IAM role ARN for Textract operations with tenant tagging
+      required_by:
+        - lambda_start_textract_analysis.py
+        - lambda_get_textract_results.py
+        
+    - name: CORS_ALLOW_ORIGIN
+      example: "*"
+      description: CORS origin header (Lambda responses)
+      default: "*"
+      
+    - name: CORS_ALLOW_HEADERS
+      example: Content-Type,Authorization
+      description: CORS allowed headers (Lambda responses)
+      default: Content-Type,Authorization
+      
+    - name: CORS_ALLOW_METHODS
+      example: POST,OPTIONS
+      description: CORS allowed methods (Lambda responses)
+      default: POST,OPTIONS
+      
+    - name: PRESIGNED_URL_EXPIRATION
+      example: "3600"
+      description: Presigned URL expiration time in seconds
+      default: "3600"
+      required_by:
+        - lambda_s3_presigned_url.py
+
+# Request/Response Flow Examples
+# ===============================
+flow_examples:
+  - operation: Upload PDF file to S3
+    frontend_call: uploadFile(file, bucket, key, description)
+    flask_endpoint: POST /api/s3/upload
+    flask_action: |
+      1. Extract user_id from JWT
+      2. Build S3 key: users/{user_id}/{key}
+      3. Call API_GATEWAY_S3_PRESIGNED_URL_ENDPOINT with method="put"
+      4. Receive presigned URL from Lambda
+      5. Upload file to S3 using presigned URL
+      6. Return success response to frontend
+    api_gateway_endpoint: API_GATEWAY_S3_PRESIGNED_URL_ENDPOINT
+    lambda_function: lambda_s3_presigned_url.py
+    lambda_action: |
+      1. Receive request from API Gateway
+      2. Extract user_id from event['requestContext']['authorizer']['claims']['sub']
+      3. Assume S3_TENANT_ROLE_ARN with TenantID tag
+      4. Validate object doesn't exist (for PUT)
+      5. Generate presigned PUT URL
+      6. Return presigned URL
+      
+  - operation: List templates for user
+    frontend_call: listS3Objects(bucket, parentFolder, listFiles)
+    flask_endpoint: POST /api/s3/list-objects
+    flask_action: |
+      1. Extract user_id from JWT
+      2. Build parent folder: users/{user_id}/{parentFolder}
+      3. Call API_GATEWAY_S3_LIST_FOLDERS_ENDPOINT
+      4. Receive folder/file list from Lambda
+      5. Return list to frontend
+    api_gateway_endpoint: API_GATEWAY_S3_LIST_FOLDERS_ENDPOINT
+    lambda_function: lambda_list_s3_folders.py
+    lambda_action: |
+      1. Receive request from API Gateway
+      2. Extract user_id from event['requestContext']['authorizer']['claims']['sub']
+      3. Assume S3_TENANT_ROLE_ARN with TenantID tag
+      4. List objects in S3 with prefix
+      5. Return folders or files based on list_files parameter
+      
+  - operation: Start Textract analysis
+    frontend_call: startTextractAnalysis(bucket, key, outputBucket, outputKeyPrefix)
+    flask_endpoint: POST /api/textract/start-analysis
+    flask_action: |
+      1. Extract user_id from JWT
+      2. Build keys with user_id prefix
+      3. Call API_GATEWAY_TEXTRACT_START_ENDPOINT
+      4. Receive job ID from Lambda
+      5. Return job ID to frontend
+    api_gateway_endpoint: API_GATEWAY_TEXTRACT_START_ENDPOINT
+    lambda_function: lambda_start_textract_analysis.py
+    lambda_action: |
+      1. Receive request from API Gateway
+      2. Extract user_id from event['requestContext']['authorizer']['claims']['sub']
+      3. Assume TEXTRACT_ROLE_ARN with TenantID tag
+      4. Call textract.start_document_analysis()
+      5. Return job ID
+      
+  - operation: Poll Textract results (server-side)
+    frontend_call: pollTextractResults(jobId, pollInterval, maxAttempts)
+    flask_endpoint: POST /api/textract/poll-results
+    flask_action: |
+      1. Loop: Call API_GATEWAY_TEXTRACT_GET_RESULTS_ENDPOINT
+      2. Check job status
+      3. If IN_PROGRESS, wait pollInterval and retry
+      4. If SUCCEEDED, handle pagination with nextToken
+      5. Combine all blocks from paginated results
+      6. Return complete results to frontend
+    api_gateway_endpoint: API_GATEWAY_TEXTRACT_GET_RESULTS_ENDPOINT
+    lambda_function: lambda_get_textract_results.py
+    lambda_action: |
+      1. Receive request from API Gateway (called multiple times during polling)
+      2. Extract user_id from event['requestContext']['authorizer']['claims']['sub']
+      3. Assume TEXTRACT_ROLE_ARN with TenantID tag
+      4. Call textract.get_document_analysis(JobId, NextToken)
+      5. Return job status and blocks (single page)
+    notes: Flask backend handles polling loop, Lambda just returns current state
+
+# Architecture Diagram
+# ====================
+architecture:
+  current_state: Frontend → Flask Backend → API Gateway → Lambda → AWS Services
+  
+  components:
+    - name: Frontend (React + Redux)
+      responsibilities:
+        - User interface
+        - Authentication via AWS Amplify/Cognito
+        - API calls to Flask backend only
+      endpoints_called:
+        - /api/s3/upload
+        - /api/s3/list-objects
+        - /api/s3/presigned-url
+        - /api/s3/fetch-html-template
+        - /api/textract/start-analysis
+        - /api/textract/get-results
+        - /api/textract/poll-results
+        - /api/textract/get-results-from-s3
+        - /api/pdf/convert-to-html (existing)
+        - /api/report/generate-from-html (existing)
+        
+    - name: Flask Backend
+      responsibilities:
+        - Proxy to API Gateway endpoints
+        - Extract user_id from JWT for path building
+        - Server-side polling for long operations
+        - Response aggregation and transformation
+        - CORS handling
+      calls_to:
+        - API Gateway endpoints (4 endpoints documented here)
+        
+    - name: API Gateway
+      responsibilities:
+        - JWT token validation (Cognito Authorizer)
+        - Request routing to Lambda functions
+        - Add user context to Lambda events
+      authorizer: Cognito User Pool Authorizer
+      
+    - name: Lambda Functions (4 functions)
+      responsibilities:
+        - IAM role assumption for tenant isolation
+        - AWS service operations (S3, Textract)
+        - Tenant-scoped access control
+      functions:
+        - lambda_s3_presigned_url.py
+        - lambda_list_s3_folders.py
+        - lambda_start_textract_analysis.py
+        - lambda_get_textract_results.py
+        
+    - name: AWS Services
+      services:
+        - S3 (file storage)
+        - Textract (document analysis)

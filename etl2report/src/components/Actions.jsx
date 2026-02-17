@@ -15,7 +15,7 @@ import ViewReports from './ViewReports';
 export default function Actions() {
     const dispatch = useDispatch();
     const { actionsDefaultHeight } = useSelector(state => state.sizing);
-    const { templates, loading, error, loadingPdf, currentTemplate } = useSelector(state => state.templates);
+    const { templates, loading, error, loadingPdf, currentTemplate, loadedPdfs } = useSelector(state => state.templates);
     const [showNewTemplate, setShowNewTemplate] = useState(false);
     const [showEditTemplate, setShowEditTemplate] = useState(false);
     const [showCreateReport, setShowCreateReport] = useState(false);
@@ -59,12 +59,28 @@ export default function Actions() {
     
     const loadTemplatePdf = async (templateName) => {
         try {
+            // Check if PDF is already cached in state
+            const cached = loadedPdfs[templateName];
+            
+            if (cached && cached.url) {
+                console.log('Using already loaded PDF from state:', templateName);
+                dispatch(setPdfUrl(cached.url));
+                dispatch(setLoading(false));
+                return;
+            }
+            
             dispatch(setLoading(true));
             const pdfUrl = await dispatch(fetchTemplatePdf(templateName));
-            dispatch(setPdfUrl(pdfUrl));
+            console.log('PDF URL received:', pdfUrl);
+            
+            if (pdfUrl) {
+                dispatch(setPdfUrl(pdfUrl));
+            }
+            dispatch(setLoading(false));
         } catch (error) {
             console.error('Failed to load template PDF:', error);
-            // Error is already handled in the thunk, just log here
+            dispatch(setLoading(false));
+            dispatch(setError(`Failed to load template PDF: ${error.message || 'Unknown error'}`));
         }
     };
     
@@ -75,11 +91,14 @@ export default function Actions() {
         setShowEditTemplate(true);
         
         try {
+            // Load PDF if not already loaded
+            await loadTemplatePdf(currentTemplate);
+            
+            // Load Textract blocks
             const blocks = await dispatch(fetchTemplateTextract(currentTemplate));
             dispatch(setTextractBlocks(blocks));
-            // You might want to show a success message or notification here
         } catch (error) {
-            console.error('Failed to load Textract results:', error);
+            console.error('Failed to load template data:', error);
             alert('Failed to load template analysis results. Please try again.');
         }
     };

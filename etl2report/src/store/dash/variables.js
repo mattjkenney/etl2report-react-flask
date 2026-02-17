@@ -1,4 +1,4 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, createSelector } from '@reduxjs/toolkit';
 
 const initialState = {
     // Cache of variable states keyed by sectionId, templateId, then item id
@@ -146,17 +146,49 @@ export const {
 } = variableSlice.actions;
 
 // Selectors
-export const selectItemState = (state, sectionId, templateId, itemId) => {
-    return state.variables.cache[sectionId]?.[templateId]?.[itemId] || getDefaultStateForSection(sectionId);
+// Memoized selector to prevent unnecessary re-renders
+// Cache the default state objects to maintain reference equality
+const defaultStateCache = new Map();
+
+const getOrCreateDefaultState = (sectionId) => {
+    if (!defaultStateCache.has(sectionId)) {
+        defaultStateCache.set(sectionId, getDefaultStateForSection(sectionId));
+    }
+    return defaultStateCache.get(sectionId);
 };
 
-export const selectTemplateItems = (state, sectionId, templateId) => {
-    return state.variables.cache[sectionId]?.[templateId] || {};
-};
+export const selectItemState = createSelector(
+    [
+        (state) => state.variables.cache,
+        (state, sectionId) => sectionId,
+        (state, sectionId, templateId) => templateId,
+        (state, sectionId, templateId, itemId) => itemId,
+    ],
+    (cache, sectionId, templateId, itemId) => {
+        return cache[sectionId]?.[templateId]?.[itemId] || getOrCreateDefaultState(sectionId);
+    }
+);
 
-export const selectSectionItems = (state, sectionId) => {
-    return state.variables.cache[sectionId] || {};
-};
+export const selectTemplateItems = createSelector(
+    [
+        (state) => state.variables.cache,
+        (state, sectionId) => sectionId,
+        (state, sectionId, templateId) => templateId,
+    ],
+    (cache, sectionId, templateId) => {
+        return cache[sectionId]?.[templateId] || {};
+    }
+);
+
+export const selectSectionItems = createSelector(
+    [
+        (state) => state.variables.cache,
+        (state, sectionId) => sectionId,
+    ],
+    (cache, sectionId) => {
+        return cache[sectionId] || {};
+    }
+);
 
 export const selectAllItems = (state) => state.variables.cache;
 
