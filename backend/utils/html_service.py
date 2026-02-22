@@ -9,6 +9,7 @@ from utils.api_gateway_client import call_s3_presigned_url_lambda
 logger = logging.getLogger(__name__)
 
 
+
 def fetch_html_template_from_s3(bucket: str, template_id: str, auth_token: str) -> str:
     """
     Fetch HTML template from S3 using presigned URL.
@@ -48,6 +49,7 @@ def fetch_html_template_from_s3(bucket: str, template_id: str, auth_token: str) 
         logger.error(f"Error fetching HTML template: {e}")
         raise
 
+
 def replace_html_elements_by_block_id(html_content: str, replacements: Dict[str, str]) -> str:
     """
     Replace element contents using data-block-id attributes.
@@ -70,7 +72,8 @@ async def convert_html_to_pdf_playwright(html_content: str, page_format: str = '
     async with async_playwright() as p:
         browser = await p.chromium.launch()
         page = await browser.new_page()
-        await page.set_content(html_content)
+        # wait_until='networkidle' ensures all images have finished loading before PDF conversion
+        await page.set_content(html_content, wait_until='networkidle')
         # Emulate print media to apply @media print styles
         await page.emulate_media(media='print')
         pdf_bytes = await page.pdf(

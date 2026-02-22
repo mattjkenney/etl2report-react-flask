@@ -264,14 +264,67 @@ def convert_pdf_to_html():
         # Download PDF for font detection if S3 location provided
         pdf_content = None
         font_detection_enabled = False
+        figure_extraction_enabled = False
+        user_id = None
+        template_id = None
+        auth_token = None
         
         if pdf_s3_bucket and pdf_s3_key:
             try:
                 from utils.pdf_service import download_pdf_from_s3
+                from utils.jwt_helper import extract_user_id
+                
                 auth_token = auth_header.replace('Bearer ', '')
+                
+                # Extract user_id from JWT token first
+                try:
+                    user_id = extract_user_id(auth_token)
+                    logger.info(f"Extracted user_id: {user_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to extract user_id from token: {str(e)}")
+                
+                # Normalize S3 key - add user_id prefix if missing
+                # Expected format: users/{user_id}/templates/{template_id}/{template_id}.pdf
+                if user_id and not pdf_s3_key.startswith(f'users/{user_id}/'):
+                    # If key doesn't start with users/{user_id}/, add it
+                    if pdf_s3_key.startswith('templates/'):
+                        # Key is like: templates/st_report4/st_report4.pdf
+                        normalized_key = f'users/{user_id}/{pdf_s3_key}'
+                        logger.info(f"Normalized S3 key: {pdf_s3_key} → {normalized_key}")
+                        pdf_s3_key = normalized_key
+                    elif not pdf_s3_key.startswith('users/'):
+                        # Key doesn't have any prefix, assume it needs full path
+                        logger.warning(f"S3 key missing expected prefix: {pdf_s3_key}")
+                
                 pdf_content = download_pdf_from_s3(pdf_s3_bucket, pdf_s3_key, auth_token)
                 font_detection_enabled = True
                 logger.info(f"PDF downloaded for font detection: {pdf_s3_bucket}/{pdf_s3_key}")
+                
+                # Extract template_id from S3 key (format: users/{user_id}/templates/{template_id}/...)
+                try:
+                    import re
+                    match = re.search(r'users/[^/]+/templates/([^/]+)', pdf_s3_key)
+                    if match:
+                        template_id = match.group(1)
+                        logger.info(f"Extracted template_id: {template_id}")
+                    else:
+                        # Try alternate pattern: templates/{template_id}/{filename}.pdf
+                        match = re.search(r'templates/([^/]+)/', pdf_s3_key)
+                        if match:
+                            template_id = match.group(1)
+                            logger.info(f"Extracted template_id from alternate pattern: {template_id}")
+                        else:
+                            logger.warning(f"Could not extract template_id from S3 key: {pdf_s3_key}")
+                except Exception as e:
+                    logger.warning(f"Failed to parse template_id from S3 key: {str(e)}")
+                
+                # Enable figure extraction if we have all required parameters
+                if user_id and template_id:
+                    figure_extraction_enabled = True
+                    logger.info("Figure extraction enabled for LAYOUT_FIGURE blocks")
+                else:
+                    logger.warning("Figure extraction disabled: missing user_id or template_id")
+                    
             except Exception as e:
                 logger.warning(f"Failed to download PDF for font detection: {str(e)}")
                 # Continue without font detection
@@ -282,22 +335,29 @@ def convert_pdf_to_html():
             template_name=template_name,
             page_width=page_width,
             page_height=page_height,
-            pdf_content=pdf_content
+            pdf_content=pdf_content,
+            s3_bucket=pdf_s3_bucket if figure_extraction_enabled else None,
+            user_id=user_id if figure_extraction_enabled else None,
+            template_id=template_id if figure_extraction_enabled else None,
+            auth_token=auth_token if figure_extraction_enabled else None
         )
         
         # Count text blocks in generated HTML
         line_blocks = [b for b in textract_blocks if b.get('BlockType') == 'LINE']
+        figure_blocks = [b for b in textract_blocks if b.get('BlockType') == 'LAYOUT_FIGURE']
         
         return jsonify({
             'success': True,
             'html': html_content,
             'template_name': template_name,
             'block_count': len(line_blocks),
+            'figure_count': len(figure_blocks),
             'page_dimensions': {
                 'width': page_width,
                 'height': page_height
             },
-            'font_detection_enabled': font_detection_enabled
+            'font_detection_enabled': font_detection_enabled,
+            'figure_extraction_enabled': figure_extraction_enabled
         }), 200
     
     except Exception as e:
