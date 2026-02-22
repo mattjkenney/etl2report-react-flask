@@ -78,7 +78,8 @@ api_gateway_endpoints:
           parent_folder: string (optional, default empty)
           list_files: true
         response:
-          files: array of objects
+          files: 
+            array of objects:
             - key: string
               fileName: string
               size: number
